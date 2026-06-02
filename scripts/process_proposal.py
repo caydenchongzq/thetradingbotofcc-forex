@@ -100,6 +100,9 @@ def main(argv) -> int:
         m = r.report.metrics
         print(f"  in-sample: trades={m['trade_count']} exp={m['expectancy_r']:+.3f}R "
               f"PF={m['profit_factor']:.2f} sharpe={m['sharpe']:.2f} breaches={r.report.ftmo['breaches']}")
+        failed_gates = [n for n, g in r.report.gates.items() if not g.passed]
+        if failed_gates:
+            print(f"  in-sample gates FAILED: {', '.join(failed_gates)}")
         v = r.verdict
         print(f"  OOS: folds {v.folds_profitable}/{v.folds_scored} profitable, "
               f"stitched_collapse={v.stitched_collapse}, severe={v.severe_collapse}, "

@@ -1,0 +1,21 @@
+<!-- WinSW service definition (spec 07 §2). Install:
+       winsw install scripts\service\ftmo-bot.xml
+       winsw start   scripts\service\ftmo-bot.xml
+     WinSW wraps python.exe as a Windows service under the SCM with auto-restart, so the
+     engine survives crashes/reboots. Run under the auto-logon console user that owns the
+     MT5 terminal session. Secrets come from the machine environment / .env (NOT here). -->
+<service>
+  <id>ftmo-bot</id>
+  <name>FTMO EURUSD Bot</name>
+  <description>Deterministic FTMO EURUSD trading engine (spec 07).</description>
+  <executable>py</executable>
+  <arguments>-m src.engine.run</arguments>
+  <workingdirectory>%BASE%\..\..</workingdirectory>
+  <onfailure action="restart" delay="10 sec"/>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>14</keepFiles>
+  </log>
+  <env name="TBOT_ENV" value="challenge"/>
+  <env name="TBOT_CONFIG_FILE" value="config/default.yaml"/>
+</service>

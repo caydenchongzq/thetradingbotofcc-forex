@@ -78,3 +78,28 @@ backtest:
     stops_level_pips: 0.0
     digits: 5
     pip_size: 0.0001
+
+# Ops & deployment (spec 07).
+ops:
+  host_phase: A                    # A=local | B=vps | C=vps+linux-ai-box
+  service:
+    supervisor: winsw              # winsw | nssm
+    engine_entry: src/engine/run.py
+    auto_restart: true
+  watchdog:
+    poll_seconds: 5
+    tick_freshness_seconds: 90
+    ipc_backoff_base_seconds: 2
+    ipc_backoff_max_seconds: 60
+  alerts:
+    telegram_bot_token: ${TBOT_TELEGRAM_BOT_TOKEN}
+    telegram_chat_id: ${TBOT_TELEGRAM_CHAT_ID}
+    healthchecks_url: ${TBOT_HEALTHCHECKS_URL}
+    daily_loss_warn_pct: 0.40
+    request_budget_warn: 1600
+  backups:
+    on_box_dir: state/backups
+    off_box_target: ${TBOT_BACKUP_OFFBOX_URI}
+    interval_minutes: 60
+  network:
+    no_us_geolocation: true        # FTMO hard rule — enforced operationally

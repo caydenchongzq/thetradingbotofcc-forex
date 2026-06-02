@@ -1,0 +1,11 @@
+{
+  "proposal_id": "2026-06-02-w23-003",
+  "parent_config_version": 1,
+  "author": "strategy_researcher",
+  "created_utc": "2026-06-02T18:25:00Z",
+  "hypothesis": "Raise the ATR floor (4.0->5.0 pips) to stand aside in dead low-volatility sessions (the early-2024 failure mode) without touching the ER gate, preserving trade count.",
+  "diff": [
+    {"param": "regime.atr_floor_pips", "from": 4.0, "to": 5.0}
+  ],
+  "status": "proposed"
+}

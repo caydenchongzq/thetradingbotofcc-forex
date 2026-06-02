@@ -1,0 +1,11 @@
+{
+  "proposal_id": "2026-06-02-w23-002",
+  "parent_config_version": 1,
+  "author": "strategy_researcher",
+  "created_utc": "2026-06-02T18:20:00Z",
+  "hypothesis": "Milder ER tighten (0.30->0.33) to trim the worst low-ER chop while keeping trade count above the 200 sample floor.",
+  "diff": [
+    {"param": "regime.er_threshold", "from": 0.30, "to": 0.33}
+  ],
+  "status": "proposed"
+}

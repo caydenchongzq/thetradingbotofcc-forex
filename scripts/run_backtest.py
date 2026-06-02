@@ -24,6 +24,7 @@ from src.backtest.types import BacktestRequest, WFSpec         # noqa: E402
 from src.backtest.walkforward import walk_forward              # noqa: E402
 from src.common.config import load_config                      # noqa: E402
 from src.data.store import read_parquet_bars                   # noqa: E402
+from src.ops.runtime_config import resolve_strategy_config     # noqa: E402
 from src.engine import SessionBreakoutER                       # noqa: E402
 from src.risk.governor import RiskGovernor                     # noqa: E402
 from src.risk.types import SymbolMeta                          # noqa: E402
@@ -34,6 +35,8 @@ def main(argv) -> int:
     ap.add_argument("--trials", type=int, default=1,
                     help="cumulative trial count (raises the deflated-Sharpe bar)")
     ap.add_argument("--data", default=None, help="override parquet path")
+    ap.add_argument("--initial", type=float, default=None,
+                    help="account initial balance (e.g. 10000 for an FTMO 10k)")
     ap.add_argument("--walkforward", action="store_true",
                     help="time-fold OOS stability + held-out lockbox verdict (spec 05 §7)")
     ap.add_argument("--lockbox-months", type=int, default=6)
@@ -66,13 +69,14 @@ def main(argv) -> int:
         slippage_pips=float(bt.get("slippage_pips", 0.2)),
         pip_size=sm.pip_size, pip_value_per_lot_usd=sm.pip_value_per_lot_usd)
 
-    strat_cfg = dict(cfg.raw.get("strategy", {}))
-    strat_cfg["config_version"] = cfg.config_version
+    strat_cfg, active_version = resolve_strategy_config(
+        cfg.state_dir, cfg.raw.get("strategy", {}), cfg.config_version)
+    print(f"Active strategy config: v{active_version} (from versioned store HEAD)")
     strategy = SessionBreakoutER(strat_cfg)
     governor = RiskGovernor(cfg.risk)
 
     engine = EventDrivenBacktester(strategy, governor, sm, cost,
-                                   initial_balance=cfg.account.initial)
+                                   initial_balance=(args.initial or cfg.account.initial))
     req = BacktestRequest(
         strategy_name=strategy.name, config_version=cfg.config_version, config=strat_cfg,
         data_set="mt5_final", period=(bars[0].ts_open_utc, bars[-1].ts_open_utc),
@@ -105,7 +109,7 @@ def main(argv) -> int:
     wf = WFSpec(train_months=12, test_months=3, step_months=3,
                 lockbox_months=args.lockbox_months)
     wfr = walk_forward(trades, (bars[0].ts_open_utc, bars[-1].ts_open_utc), wf,
-                       initial=cfg.account.initial)
+                       initial=(args.initial or cfg.account.initial))
 
     print("\n============== WALK-FORWARD (OOS) ===============")
     print(f"{'window':<25}{'trades':>7}{'exp(R)':>9}{'PF':>7}{'net$':>10}")

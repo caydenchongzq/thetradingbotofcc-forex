@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "thetradingbotofcc-forex"
+version = "0.1.0"
+description = "FTMO EURUSD trading bot — deterministic spine + AI improvement loop"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0",
+    "pyarrow>=14.0",
+    "PyYAML>=6.0",
+    # MetaTrader5 is Windows-only and installed on the live host only.
+    # It is intentionally NOT a hard dependency so the deterministic spine
+    # (journal, risk) can be developed and tested on any platform.
+]
+
+[project.optional-dependencies]
+live = ["MetaTrader5>=5.0.45"]
+backtest = ["vectorbt>=0.26", "numpy>=1.24"]
+dev = [
+    "pytest>=8.0",
+    "hypothesis>=6.100",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["error::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+warn_unused_ignores = true
+disallow_untyped_defs = true

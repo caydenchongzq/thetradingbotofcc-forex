@@ -1,0 +1,80 @@
+# Strategy/risk config — versioned (config_version stamped on every journal record).
+# The improvement loop (06) proposes diffs against this; promotion is a gated version bump.
+config_version: 1
+schema_version: 3
+
+account:
+  initial: 100000          # USD; overridden by TBOT_ACCOUNT_INITIAL
+  currency: USD
+
+risk:
+  base_risk_fraction: 0.0035
+  slippage_spread_buffer: 0.20
+  cautious_size_mult: 0.5
+  reduced_size_mult: 0.5
+  killswitch:
+    warn_pct: 0.40
+    halt_pct: 0.60
+    flatten_pct: 0.85
+  overall_taper_start: 0.06
+  max_concurrent_risk_usd_pct: 0.010
+  max_trades_per_day: 6
+  max_concurrent_pendings: 2
+  size_consistency_band: 0.50
+  request_soft_cap: 1600
+  request_hard_cap: 1900
+  stale_quote_tolerance_pips: 2.0
+  news_blackout_min: 2
+
+execution:
+  magic: 770042
+  symbol: EURUSD
+  deviation_points: 20
+
+# Strategy engine levers (spec 01 §4). These are what the improvement loop may tune.
+strategy:
+  name: SessionBreakoutER
+  instrument: EURUSD
+  timeframe: M15
+  pip_size: 0.0001
+  timeframe_minutes: 15
+  session:
+    tz: Europe/London
+    window_start: "13:00"
+    window_end: "16:00"
+    opening_range_minutes: 30
+    one_shot_per_side: true
+  breakout:
+    buffer_pips: 1.5
+  regime:
+    er_window: 14
+    er_threshold: 0.30
+    atr_window: 14
+    atr_floor_pips: 4.0
+    atr_ceiling_pips: 22.0
+    atr_low_pct: 0.20
+    atr_high_pct: 0.90
+  exits:
+    atr_mult_sl: 1.2
+    target_r_multiples: [1.0, 2.0]
+    partial_fractions: [0.5, 0.5]
+    move_be_after_r: 1.0
+  blackout:
+    high_impact_currencies: [EUR, USD]
+    before_min: 15
+    after_min: 15
+    before_2h_close_min: 120
+
+# Backtest harness inputs (spec 05).
+backtest:
+  data_path: state/parquet/eurusd_m15.parquet
+  commission_per_lot_per_side_usd: 3.0     # FTMO-style; tune to your account's schedule
+  slippage_pips: 1.0
+  symbol:                                   # EURUSD specs captured from the FTMO probe
+    pip_value_per_lot_usd: 10.0
+    min_lot: 0.01
+    max_lot: 50.0
+    lot_step: 0.01
+    stops_level_pips: 0.0
+    digits: 5
+    pip_size: 0.0001

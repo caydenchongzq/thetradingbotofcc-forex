@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+
+# Local runtime state (journal, sqlite, parquet, backups) — never commit live data
+state/
+!state/.gitkeep
+*.sqlite
+*.sqlite-journal
+*.jsonl
+*.parquet
+
+# Secrets / env
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db

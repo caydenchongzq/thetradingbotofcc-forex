@@ -1,0 +1,11 @@
+{
+  "proposal_id": "2026-06-02-w23-001",
+  "parent_config_version": 1,
+  "author": "strategy_researcher",
+  "created_utc": "2026-06-02T18:05:00Z",
+  "hypothesis": "Early-2024 losses came in low-ER chop; tightening the ER gate from 0.30 to 0.38 should cut false breakouts with little trade-count loss.",
+  "diff": [
+    {"param": "regime.er_threshold", "from": 0.30, "to": 0.38}
+  ],
+  "status": "proposed"
+}

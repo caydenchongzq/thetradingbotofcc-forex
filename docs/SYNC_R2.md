@@ -42,13 +42,13 @@ The engine writes `state/journal/` + `state/live.sqlite` as it trades. Push them
 separate small job):
 
 - Program/script: `py`
-- Arguments: `-3.12 scripts\sync_r2.py push --paths journal live.sqlite config --prefix vps`
+- Arguments: `-3.12 scripts\sync_r2.py push --paths journal live.sqlite config alerts --prefix vps`
 - Start in: `C:\Users\Administrator\Documents\thetradingbotofcc-forex`
 - Trigger: every 15 minutes.
 
 Test it once by hand first:
 ```
-py -3.12 scripts\sync_r2.py push --paths journal live.sqlite config --prefix vps
+py -3.12 scripts\sync_r2.py push --paths journal live.sqlite config alerts --prefix vps
 ```
 You should see `pushed N files to r2://ftmo-bot-state/vps/`.
 
@@ -75,6 +75,19 @@ py -3.12 scripts\sync_r2.py pull --prefix promote --dest state
 .\scripts\service\ftmo-bot.exe restart
 ```
 Promotions are rare during a forward test — do this deliberately, not on a timer.
+
+## 5a. Alert relay (when the VPS firewall blocks Telegram)
+If the VPS can't reach Telegram (e.g. a TLS-inspecting firewall — symptom: SSL
+CERTIFICATE_VERIFY_FAILED), the engine still writes every alert to `state\alerts\<date>.jsonl`,
+which the push (with `alerts` in `--paths`) carries to R2. On your LOCAL PC, forward them to
+Telegram (where it works):
+```
+py scripts\sync_r2.py pull --prefix vps --dest C:\ftmo-sync
+py scripts\forward_alerts.py --src C:\ftmo-sync
+```
+A scheduled task can run those two every ~15 min. A marker file (`.alerts_forwarded`) ensures
+each alert is sent once. (If Discord or healthchecks.io ARE reachable from the VPS, set
+`TBOT_DISCORD_WEBHOOK` / `TBOT_HEALTHCHECKS_URL` instead — simpler, real-time, no relay needed.)
 
 ## 6. Safety notes
 - The VPS is the **only writer** of `live.sqlite`; local only reads its pulled copy. No two-writer

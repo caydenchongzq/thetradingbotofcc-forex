@@ -12,7 +12,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.common.config import load_config        # noqa: E402
-from src.ops.alerts import Severity, format_alert, ping_healthcheck, send_telegram  # noqa: E402
+from src.ops.alerts import (Severity, format_alert, ping_healthcheck,  # noqa: E402
+                            send_discord, send_telegram)
 
 
 def main() -> int:
@@ -27,6 +28,12 @@ def main() -> int:
         ok = send_telegram(a.telegram_bot_token, a.telegram_chat_id, msg)
         print("Telegram:", "sent OK (check your phone)" if ok
               else "FAILED — check the token / chat id are correct")
+
+    if a.discord_webhook:
+        ok = send_discord(a.discord_webhook, msg)
+        print("Discord:", "sent OK (check the channel)" if ok else "FAILED — check the webhook URL")
+    else:
+        print("Discord NOT configured (TBOT_DISCORD_WEBHOOK) — optional.")
 
     if a.healthchecks_url:
         print("Healthchecks ping:", "OK" if ping_healthcheck(a.healthchecks_url)

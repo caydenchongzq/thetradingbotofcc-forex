@@ -21,9 +21,9 @@ from src.common.config import AppConfig, load_config
 from src.common.timeutil import ensure_utc, ftmo_day_start, is_new_ftmo_day, utc_iso
 from src.engine import SessionBreakoutER
 from src.engine.decide import decide_entry, decide_manage
-from src.ops import (Severity, backoff_delay, engage_killswitch, format_alert,
-                     killswitch_engaged, ping_healthcheck, resolve_strategy_config,
-                     send_telegram)
+from src.ops import (Severity, append_alert_file, backoff_delay, engage_killswitch,
+                     format_alert, killswitch_engaged, ping_healthcheck,
+                     resolve_strategy_config, send_discord, send_telegram)
 from src.risk.envelope import compute_envelope
 from src.risk.governor import RiskGovernor, apply_daily_reset
 from src.risk.types import ContextBias, DayState, KillSwitchState
@@ -95,21 +95,30 @@ class LiveEngine:
                            symbol=self.cfg.execution.symbol)
         log.log(logging.WARNING if severity is not Severity.INFO else logging.INFO,
                 "ALERT %s: %s %s", severity.value, event, detail)
+        try:   # durable file sink (rides R2 sync; works even if all networks are blocked)
+            append_alert_file(self.cfg.state_dir, severity, event, detail,
+                              env=self.cfg.env, symbol=self.cfg.execution.symbol)
+        except Exception:
+            pass
+        sent = False
         if self.alerts.telegram_configured:
-            ok = send_telegram(self.alerts.telegram_bot_token, self.alerts.telegram_chat_id, msg)
-            if not ok and not self._tg_warned:
-                log.warning("Telegram send FAILED (network/credentials?) — alerts are "
-                            "console/log only until this is fixed")
-                self._tg_warned = True
+            sent = send_telegram(self.alerts.telegram_bot_token,
+                                 self.alerts.telegram_chat_id, msg) or sent
+        if self.alerts.discord_webhook:
+            sent = send_discord(self.alerts.discord_webhook, msg) or sent
+        if self.alerts.any_channel and not sent and not self._tg_warned:
+            log.warning("Alert send FAILED on all channels (network/credentials?) — alerts "
+                        "are console/log only until this is fixed")
+            self._tg_warned = True
 
     # ---- the supervised loop ----
     def run(self, *, poll_seconds: int = 5, max_iterations: int | None = None) -> None:
         configure_logging(self.cfg.state_dir)
         log.info("starting engine: env=%s symbol=%s magic=%s state=%s", self.cfg.env,
                  self.cfg.execution.symbol, self.cfg.execution.magic, self.cfg.state_dir)
-        if not self.alerts.telegram_configured:
-            log.warning("Telegram NOT configured (TBOT_TELEGRAM_BOT_TOKEN/CHAT_ID missing in "
-                        ".env) — running with console/log alerts only")
+        if not self.alerts.any_channel:
+            log.warning("No push alert channel configured (Telegram or Discord) — running "
+                        "with console/log alerts only")
         if not self.alerts.healthchecks_url:
             log.warning("Healthchecks URL not set (TBOT_HEALTHCHECKS_URL) — no dead-man switch")
         self._connect()

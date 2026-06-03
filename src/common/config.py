@@ -103,10 +103,15 @@ class AlertsConfig:
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None
     healthchecks_url: str | None = None
+    discord_webhook: str | None = None
 
     @property
     def telegram_configured(self) -> bool:
         return bool(self.telegram_bot_token and self.telegram_chat_id)
+
+    @property
+    def any_channel(self) -> bool:
+        return bool(self.telegram_configured or self.discord_webhook)
 
 
 @dataclass(frozen=True)
@@ -220,6 +225,7 @@ def load_config(
         telegram_bot_token=env.get("TBOT_TELEGRAM_BOT_TOKEN") or None,
         telegram_chat_id=env.get("TBOT_TELEGRAM_CHAT_ID") or None,
         healthchecks_url=env.get("TBOT_HEALTHCHECKS_URL") or None,
+        discord_webhook=env.get("TBOT_DISCORD_WEBHOOK") or None,
     )
 
     exec_raw = raw.get("execution", {}) or {}

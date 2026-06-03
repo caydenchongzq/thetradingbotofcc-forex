@@ -77,3 +77,57 @@ def test_live_loop_idempotent_same_bar(tmp_path, monkeypatch):
     sends = sum(1 for e in broker.events if e[0] == "order_send")
     assert sends == 1
     journal.close()
+
+
+def test_day_state_persisted_after_entry(tmp_path, monkeypatch):
+    monkeypatch.setenv("TBOT_STATE_DIR", str(tmp_path / "state"))
+    cfg = load_config(config_file="config/default.yaml")
+    eng_bars, now = make_series(date(2026, 6, 2), "trend_up")
+    broker = FakeBroker(); broker.server_offset_s = 0
+    broker.rates = [_rate_from_bar(b) for b in eng_bars]
+    broker.rates.append(RateBar(time=int((eng_bars[-1].ts_open_utc + timedelta(minutes=15)).timestamp()),
+                                open=1.10, high=1.1002, low=1.0998, close=1.10, tick_volume=5, spread=4))
+    journal = Journal(tmp_path / "state")
+    from src.engine import SessionBreakoutER
+    eng = LiveEngine(cfg)
+    eng._exec = MT5Execution(broker, journal, cfg.mt5, cfg.execution, fund_request=lambda n, rr: True)
+    eng._strategy = SessionBreakoutER(DEFAULT_CFG)
+    eng._active_version = 2
+    eng._last_session_date = session_date(now, eng._strategy.tz)
+
+    eng._on_tick(now)
+    ds = journal.get_day_state()
+    assert ds is not None
+    assert ds.trades_opened_today == 1          # counter persisted (was the gap)
+    assert ds.requests_used_today >= 1
+    assert ds.open_risk_usd > 0                  # open risk tracked
+    journal.close()
+
+
+def test_deep_loss_flattens_and_latches(tmp_path, monkeypatch):
+    monkeypatch.setenv("TBOT_STATE_DIR", str(tmp_path / "state"))
+    cfg = load_config(config_file="config/default.yaml")
+    eng_bars, now = make_series(date(2026, 6, 2), "trend_up")
+    broker = FakeBroker(); broker.server_offset_s = 0
+    broker.rates = [_rate_from_bar(b) for b in eng_bars]
+    broker.rates.append(RateBar(time=int((eng_bars[-1].ts_open_utc + timedelta(minutes=15)).timestamp()),
+                                open=1.10, high=1.1002, low=1.0998, close=1.10, tick_volume=5, spread=4))
+    # Equity down ~8.5% on the day -> >= flatten_pct (0.85 of the 5% budget) -> FLATTEN.
+    av = broker.account
+    broker.account = av.__class__(login=av.login, server=av.server, currency="USD",
+                                  balance=100_000.0, equity=95_740.0, trade_mode=0,
+                                  leverage=100, name="x")
+    broker.add_position("open-trade")           # an existing position to be flattened
+    journal = Journal(tmp_path / "state")
+    from src.engine import SessionBreakoutER
+    from src.ops import killswitch_engaged
+    eng = LiveEngine(cfg)
+    eng._exec = MT5Execution(broker, journal, cfg.mt5, cfg.execution, fund_request=lambda n, rr: True)
+    eng._strategy = SessionBreakoutER(DEFAULT_CFG)
+    eng._active_version = 2
+    eng._last_session_date = session_date(now, eng._strategy.tz)
+
+    eng._on_tick(now)
+    assert broker.positions_get("EURUSD") == []                 # flattened
+    assert killswitch_engaged(tmp_path / "state")               # latched (human clears)
+    journal.close()

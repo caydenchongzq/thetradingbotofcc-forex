@@ -14,17 +14,19 @@ from __future__ import annotations
 import logging
 import logging.handlers
 import time
+from dataclasses import replace
 from datetime import date, datetime, timezone
 
 from src.common.config import AppConfig, load_config
 from src.common.timeutil import ensure_utc, ftmo_day_start, is_new_ftmo_day, utc_iso
 from src.engine import SessionBreakoutER
 from src.engine.decide import decide_entry, decide_manage
-from src.ops import (Severity, backoff_delay, format_alert, killswitch_engaged,
-                     ping_healthcheck, resolve_strategy_config, send_telegram)
+from src.ops import (Severity, backoff_delay, engage_killswitch, format_alert,
+                     killswitch_engaged, ping_healthcheck, resolve_strategy_config,
+                     send_telegram)
 from src.risk.envelope import compute_envelope
 from src.risk.governor import RiskGovernor, apply_daily_reset
-from src.risk.types import ContextBias, DayState
+from src.risk.types import ContextBias, DayState, KillSwitchState
 
 log = logging.getLogger("ftmo.engine")
 
@@ -65,6 +67,7 @@ class LiveEngine:
         self._active_version = None
         self._last_session_date = None
         self._last_bar_ts = None
+        self._tg_warned = False
 
     # ---- lazy MT5 wiring (Windows host only) ----
     def _connect(self):
@@ -92,13 +95,23 @@ class LiveEngine:
                            symbol=self.cfg.execution.symbol)
         log.log(logging.WARNING if severity is not Severity.INFO else logging.INFO,
                 "ALERT %s: %s %s", severity.value, event, detail)
-        send_telegram(self.alerts.telegram_bot_token, self.alerts.telegram_chat_id, msg)
+        if self.alerts.telegram_configured:
+            ok = send_telegram(self.alerts.telegram_bot_token, self.alerts.telegram_chat_id, msg)
+            if not ok and not self._tg_warned:
+                log.warning("Telegram send FAILED (network/credentials?) — alerts are "
+                            "console/log only until this is fixed")
+                self._tg_warned = True
 
     # ---- the supervised loop ----
     def run(self, *, poll_seconds: int = 5, max_iterations: int | None = None) -> None:
         configure_logging(self.cfg.state_dir)
         log.info("starting engine: env=%s symbol=%s magic=%s state=%s", self.cfg.env,
                  self.cfg.execution.symbol, self.cfg.execution.magic, self.cfg.state_dir)
+        if not self.alerts.telegram_configured:
+            log.warning("Telegram NOT configured (TBOT_TELEGRAM_BOT_TOKEN/CHAT_ID missing in "
+                        ".env) — running with console/log alerts only")
+        if not self.alerts.healthchecks_url:
+            log.warning("Healthchecks URL not set (TBOT_HEALTHCHECKS_URL) — no dead-man switch")
         self._connect()
         acct = self._exec.account_state()
         log.info("connected: balance=%.2f equity=%.2f %s | strategy v%s session %s-%s %s",
@@ -164,10 +177,21 @@ class LiveEngine:
             self._alert(Severity.WARN, "stale account read", "holding this bar")
             return
         day = self._load_day_state(account, now)
+        # Persist any kill-switch escalation so HALT/FLATTEN LATCH for the day (spec 02 §5):
+        # without this, an intraday loss that recovers could wrongly un-halt next bar.
+        ks = self.governor.effective_killswitch(day, account)
+        if ks is not day.killswitch:
+            day = replace(day, killswitch=ks)
+            self._exec.journal.put_day_state(day)
         env = compute_envelope(day.balance_0000, day.initial, account.equity)
         log.info("new bar %s | equity=%.2f day_pct_used=%.1f%% killswitch=%s",
-                 last_ts.isoformat(), account.equity, 100 * env.daily_pct_used,
-                 day.killswitch.value)
+                 last_ts.isoformat(), account.equity, 100 * env.daily_pct_used, ks.value)
+
+        # Risk-driven FLATTEN: close everything, latch the sentinel, stop (human clears).
+        if ks is KillSwitchState.FLATTEN:
+            self._flatten_and_halt("governor FLATTEN — daily-loss danger or stale data")
+            engage_killswitch(self.cfg.state_dir, "governor_flatten")
+            return
 
         open_positions = self._exec.open_positions()      # filtered by our magic
         if open_positions:
@@ -183,6 +207,11 @@ class LiveEngine:
         if d.action == "enter" and d.intent is not None:
             res = self._exec.place(d.intent)
             self._journal_entry(d, res)
+            # Persist day-state counters so the Governor sees today's activity next bar.
+            day = replace(day, requests_used_today=day.requests_used_today + 1,
+                          trades_opened_today=day.trades_opened_today + 1,
+                          open_risk_usd=day.open_risk_usd + d.risk_decision.risk_usd)
+            self._exec.journal.put_day_state(day)
             self._alert(Severity.INFO, "entry placed",
                         f"{d.intent.side} {d.intent.volume_lots} @ {d.intent.price} "
                         f"(risk ${d.risk_decision.risk_usd:.0f})")
@@ -203,9 +232,14 @@ class LiveEngine:
         d = decide_manage(self._strategy, self.governor, _View(), bars, now, account, day)
         if d.action == "close":
             self._exec.close(pos.ticket)
+            day = replace(day, requests_used_today=day.requests_used_today + 1,
+                          open_risk_usd=0.0)   # single-position model -> flat after close
+            self._exec.journal.put_day_state(day)
             self._alert(Severity.INFO, "position closed", f"ticket {pos.ticket}")
         elif d.action == "modify_sl" and d.new_sl is not None:
             self._exec.modify_sl_tp(pos.ticket, d.new_sl, (pos.tp,))
+            day = replace(day, requests_used_today=day.requests_used_today + 1)
+            self._exec.journal.put_day_state(day)
             log.info("moved SL on ticket %s -> %s", pos.ticket, d.new_sl)
 
     def _load_day_state(self, account, now) -> DayState:

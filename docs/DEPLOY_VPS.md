@@ -16,9 +16,14 @@ only run where the Claude desktop app runs — **your local PC**. So the split i
 ---
 
 ## 1. VPS setup (one time)
-1. Install Python 3.10+ and the FTMO **MT5 terminal**; log in to the London server.
+1. Install **Python 3.12** (or 3.11) — **NOT 3.14** (no `MetaTrader5`/`numpy<2` wheels for it).
+   Install the FTMO **MT5 terminal**; log in to the London server.
 2. `git clone` this repo somewhere (code is < 5 MB).
-3. `py -m pip install -e ".[live]"` (pulls `MetaTrader5`, pandas, pyarrow, PyYAML).
+3. `py -m pip install -r requirements-live.txt` — the engine box needs only
+   `numpy<2` + `MetaTrader5` + `PyYAML`. **`numpy<2` is required on older VPS CPUs**: a
+   `numpy>=2` install throws *"NumPy was built with baseline optimizations (X86_V2) but your
+   machine doesn't support (X86_V2)"* on CPUs without SSE4.2 (common on budget VPS). pandas/
+   pyarrow are NOT needed here (they're for backtests, which run on your local PC).
 4. Create `.env` with the trial creds, `TBOT_ENV=trial`, `TBOT_ACCOUNT_INITIAL=<trial balance>`,
    Telegram, and **`TBOT_BACKUP_OFFBOX_URI`** pointing at a cloud-synced folder (see §3).
 5. `py scripts\mt5_probe.py` → confirm account + EURUSD specs.
@@ -53,6 +58,14 @@ ship the new version to the VPS and restart so it adopts at the next session bou
 .\ftmo-bot.exe restart
 ```
 Promotions are rare during a forward test — keep this manual; automate only in Phase C.
+
+## 3a. Troubleshooting installs
+- **`X86_V2` NumPy error** -> you have numpy>=2 on an old CPU. `py -m pip uninstall -y numpy`
+  then `py -m pip install "numpy<2"`. Re-run the probe.
+- **No wheels / build errors for MetaTrader5 or numpy** -> you're on Python 3.14. Install
+  Python 3.12 and use that interpreter (`py -3.12 -m pip install -r requirements-live.txt`).
+- Verify before MT5: `py -c "import numpy; print(numpy.__version__)"` should print a 1.x
+  version and not raise.
 
 ## 4. What NOT to do
 - Don't run `run_backtest.py` on the 5 GB VPS (too heavy).

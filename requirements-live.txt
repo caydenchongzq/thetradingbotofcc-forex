@@ -1,0 +1,13 @@
+# Live host (VPS / engine box). Install with Python 3.11 or 3.12 — NOT 3.14
+# (MetaTrader5 + numpy<2 have no 3.14 wheels yet).
+#
+# numpy<2 is REQUIRED on older/limited VPS CPUs: numpy>=2 wheels are compiled to need
+# x86-64-v2 (SSE4.2) and crash with "NumPy was built with baseline optimizations (X86_V2)
+# but your machine doesn't support (X86_V2)". numpy 1.26 has an SSE2 baseline that runs
+# on any x86-64 CPU.
+#
+# The live engine only needs these three — pandas/pyarrow are for backtests + Parquet,
+# which run on your LOCAL machine, not the engine box.
+numpy<2
+MetaTrader5>=5.0.45
+PyYAML>=6.0

@@ -1,0 +1,9 @@
+# Local PC: improvement loop + backtests + R2 pull. (Heavy deps stay local, NOT on the VPS.)
+numpy
+pandas>=2.0
+pyarrow>=14.0
+PyYAML>=6.0
+tzdata; platform_system == 'Windows'
+boto3            # Cloudflare R2 pull
+hypothesis>=6.100
+pytest>=8.0

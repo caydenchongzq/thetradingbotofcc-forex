@@ -11,6 +11,7 @@ dependencies = [
     "pandas>=2.0",
     "pyarrow>=14.0",
     "PyYAML>=6.0",
+    "tzdata; platform_system == 'Windows'",  # zoneinfo tz DB on Windows
     # MetaTrader5 is Windows-only and installed on the live host only.
     # It is intentionally NOT a hard dependency so the deterministic spine
     # (journal, risk) can be developed and tested on any platform.

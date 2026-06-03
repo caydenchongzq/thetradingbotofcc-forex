@@ -9,5 +9,7 @@
 # The live engine only needs these three — pandas/pyarrow are for backtests + Parquet,
 # which run on your LOCAL machine, not the engine box.
 numpy<2
+tzdata          # Windows has no system IANA tz DB; zoneinfo needs this
 MetaTrader5>=5.0.45
 PyYAML>=6.0
+boto3            # Cloudflare R2 sync (S3-compatible); pure Python, OK on old CPUs

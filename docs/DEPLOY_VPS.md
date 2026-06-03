@@ -64,6 +64,8 @@ Promotions are rare during a forward test — keep this manual; automate only in
   then `py -m pip install "numpy<2"`. Re-run the probe.
 - **No wheels / build errors for MetaTrader5 or numpy** -> you're on Python 3.14. Install
   Python 3.12 and use that interpreter (`py -3.12 -m pip install -r requirements-live.txt`).
+- **`ZoneInfoNotFoundError: ... Europe/Prague` / `No module named 'tzdata'`** -> Windows has
+  no system IANA timezone DB. `py -m pip install tzdata` (already in requirements-live.txt).
 - Verify before MT5: `py -c "import numpy; print(numpy.__version__)"` should print a 1.x
   version and not raise.
 

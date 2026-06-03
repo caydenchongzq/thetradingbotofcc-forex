@@ -1,0 +1,13 @@
+{
+  "proposal_id": "2026-06-03-w23-exits-scaleout",
+  "parent_config_version": 3,
+  "author": "strategy_researcher",
+  "created_utc": "2026-06-03T00:00:00Z",
+  "hypothesis": "Scale out 50% at 1R, move to break-even, let the runner go to 2R. EXPECTED TO BE REJECTED — the engine now honors these levers but the A/B (docs/EXIT_MODEL.md) shows it fails the lockbox for SessionBreakoutER. Kept as a worked example of testing a param change through the gated proposal pipeline.",
+  "diff": [
+    {"param": "exits.target_r_multiples", "from": [1.0], "to": [1.0, 2.0]},
+    {"param": "exits.partial_fractions", "from": [1.0], "to": [0.5, 0.5]},
+    {"param": "exits.move_be_after_r", "from": null, "to": 1.0}
+  ],
+  "status": "proposed"
+}

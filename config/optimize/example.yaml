@@ -1,0 +1,16 @@
+# Optimizer spec (generic). Run: py scripts/optimize.py config/optimize/example.yaml
+# Sweeps a search space against a strategy, ranks by an out-of-sample objective with the
+# lockbox held out, and writes the winner as a proposal for human approval.
+
+strategy: SessionBreakoutER     # any registered strategy (py scripts/run_backtest.py --list-strategies)
+base: head                      # 'head' = live/promoted config; or a path to a dev YAML
+method: grid                    # grid | random | coarse_to_fine
+budget: 40                      # candidates to sample when method=random
+seed: 0
+objective: oos_expectancy       # oos_expectancy | in_sample_expectancy | sharpe | profit_factor
+lockbox_months: 6               # held out of ranking; the winner is checked once
+
+# Each param is either {values: [...]} or a numeric {min, max, step}.
+space:
+  regime.er_threshold:   {values: [0.28, 0.30, 0.32]}
+  regime.atr_floor_pips: {min: 4, max: 6, step: 1}     # -> 4, 5, 6

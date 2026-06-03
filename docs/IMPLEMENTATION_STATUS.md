@@ -3,6 +3,40 @@
 Tracks `docs/specs/` against the Phase-A milestones (`00-phase-roadmap.md` §2.2).
 Build order: **04 journal → 02 risk → 03 execution → 05 backtest → 01 strategy → 06 improvement → 07 ops.**
 
+## Status: BUILD COMPLETE — forward-testing (2026-06-03)
+
+All eight specs (00–07) implemented, tested (192 passing), committed to git, and deployed.
+The engine is running unattended on a London Windows VPS against the FTMO account
+(config v2), journal syncing to Cloudflare R2, the local Claude improvement-loop agents
+scheduled. Remaining work is validation-process and strategy R&D, not core build.
+
+| Spec | Component | State |
+|---|---|---|
+| 01 | Strategy engine (SessionBreakoutER) | ✅ live (v1 exit model: single 1R TP) |
+| 02 | Risk Governor | ✅ |
+| 03 | Execution / MT5 adapter | ✅ (A2 live place→close verified) |
+| 04 | Journal & State | ✅ |
+| 05 | Backtest harness + walk-forward + lockbox | ✅ (vectorbt/MC/PBO deferred) |
+| 06 | Improvement loop (param tuning) | ✅ governance + 3 scheduled agents |
+| 07 | Ops / deployment | ✅ VPS + WinSW + R2 sync + alerts + file-sink |
+
+## Validation in progress
+- **A5 forward test** on the FTMO account — running; watching live fills vs backtest.
+- **Kill-and-restart no-duplicate drill** — still to do on the demo.
+
+## Improvement backlog (the next round — see chat discussion 2026-06-03)
+The live loop AUTO-TUNES PARAMETERS only (the allowed-lever library). Structural change is
+human/agent dev work, validated through the SAME harness + walk-forward + lockbox + gates.
+Prioritised:
+1. **Full exit model in the engine** — 2R + partials + break-even + trailing (currently 100% at 1R).
+   Lets winners run; likely the single biggest equity-curve change. Then expose trail params as levers.
+2. **New entry/regime filters** — higher-timeframe trend bias, time-of-day/day-of-week, vol-of-vol gate.
+3. **New Strategy implementations** — mean-reversion, other sessions; swappable behind the Strategy interface.
+4. **Second instrument** — per-instrument config profile; prove the pipeline generalises.
+5. **Validation rigor** — Monte-Carlo reshuffle, PBO/CSCV, parameter-stability maps; vectorbt sweep.
+6. **R8 fundamental overlay** — shadow-mode news/macro bias into the context_bias seam.
+
+## (existing detail below)
 ## The deterministic spine is complete (implemented + tested)
 
 | Milestone | Component | Tests |

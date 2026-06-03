@@ -29,7 +29,7 @@ from src.backtest.validate import walkforward_verdict          # noqa: E402
 from src.backtest.walkforward import walk_forward              # noqa: E402
 from src.common.config import load_config                      # noqa: E402
 from src.data.store import read_parquet_bars                   # noqa: E402
-from src.engine import SessionBreakoutER                       # noqa: E402
+from src.engine import build_strategy                       # noqa: E402
 from src.risk.governor import RiskGovernor                     # noqa: E402
 from src.risk.types import SymbolMeta                          # noqa: E402
 
@@ -73,10 +73,10 @@ def main(argv) -> int:
     proposal = json.loads(Path(args.proposal).read_text(encoding="utf-8"))
 
     def backtest_fn(candidate_config: dict, trial_count: int) -> _Result:
-        engine = EventDrivenBacktester(SessionBreakoutER(candidate_config),
+        engine = EventDrivenBacktester(build_strategy(candidate_config),
                                        RiskGovernor(cfg.risk), sm, cost,
                                        initial_balance=cfg.account.initial)
-        req = BacktestRequest(strategy_name="SessionBreakoutER",
+        req = BacktestRequest(strategy_name=candidate_config.get("name", "SessionBreakoutER"),
                               config_version=candidate_config.get("config_version", 1),
                               config=candidate_config, data_set="mt5_final",
                               period=(bars[0].ts_open_utc, bars[-1].ts_open_utc),

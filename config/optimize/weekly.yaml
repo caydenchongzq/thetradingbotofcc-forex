@@ -1,0 +1,11 @@
+# Weekly auto-sweep (offline; backtest-only, never touches live). Run by the scheduled task.
+# Bounded regime + entry space; coarse-to-fine keeps it broad but fast.
+strategy: SessionBreakoutER
+base: head                      # always sweep around the current promoted config
+method: coarse_to_fine
+objective: oos_expectancy       # ranked OOS; lockbox sealed, winner checked once
+lockbox_months: 6
+space:
+  regime.er_threshold:   {values: [0.28, 0.30, 0.32, 0.34]}
+  regime.atr_floor_pips: {min: 4, max: 6, step: 1}      # 4,5,6
+  breakout.buffer_pips:  {values: [1.0, 1.5, 2.0]}

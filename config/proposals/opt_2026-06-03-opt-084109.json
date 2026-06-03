@@ -1,0 +1,15 @@
+{
+  "proposal_id": "2026-06-03-opt-084109",
+  "parent_config_version": 3,
+  "author": "optimizer",
+  "created_utc": "2026-06-03T08:41:09.821614+00:00",
+  "hypothesis": "Optimizer sweep (grid, 9 trials) over ['regime.er_threshold', 'regime.atr_floor_pips']; best by oos_expectancy=+0.283R OOS. Lockbox checked once.",
+  "diff": [
+    {
+      "param": "regime.er_threshold",
+      "from": 0.3,
+      "to": 0.32
+    }
+  ],
+  "status": "proposed"
+}

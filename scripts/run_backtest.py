@@ -5,8 +5,13 @@ Risk Governor, applies the R6 gates, and prints the verdict. This is the moment 
 does the edge clear every gate on out-of-sample data with ZERO FTMO breaches?
 
 Usage:
-    py scripts/run_backtest.py                       # whole dataset, trial_count=1
+    py scripts/run_backtest.py                       # live/promoted HEAD, whole dataset
+    py scripts/run_backtest.py --walkforward         # + OOS stability + lockbox
     py scripts/run_backtest.py --trials 12           # tighter DSR bar (cumulative trials)
+    py scripts/run_backtest.py --list-strategies     # show registered strategies
+    py scripts/run_backtest.py --strategy MyNew      # DEV: test a strategy by name
+    py scripts/run_backtest.py --config-file config/dev/my.yaml   # DEV: standalone config
+DEV runs (--strategy / --config-file) never touch the config store, so live is undisturbed.
 """
 
 from __future__ import annotations
@@ -26,7 +31,7 @@ from src.backtest.walkforward import walk_forward              # noqa: E402
 from src.common.config import load_config                      # noqa: E402
 from src.data.store import read_parquet_bars                   # noqa: E402
 from src.ops.runtime_config import resolve_strategy_config     # noqa: E402
-from src.engine import SessionBreakoutER                       # noqa: E402
+from src.engine import available, build_strategy               # noqa: E402
 from src.risk.governor import RiskGovernor                     # noqa: E402
 from src.risk.types import SymbolMeta                          # noqa: E402
 
@@ -42,7 +47,17 @@ def main(argv) -> int:
     ap.add_argument("--walkforward", action="store_true",
                     help="time-fold OOS stability + held-out lockbox verdict (spec 05 §7)")
     ap.add_argument("--lockbox-months", type=int, default=6)
+    ap.add_argument("--strategy", default=None,
+                    help="DEV: backtest a different REGISTERED strategy by name "
+                         "(does NOT touch the live config store)")
+    ap.add_argument("--config-file", default=None,
+                    help="DEV: load a standalone strategy YAML, bypassing the store HEAD")
+    ap.add_argument("--list-strategies", action="store_true",
+                    help="print registered strategy names and exit")
     args = ap.parse_args(argv)
+    if args.list_strategies:
+        print("Registered strategies:", ", ".join(available()))
+        return 0
     if args.state:
         os.environ["TBOT_STATE_DIR"] = args.state
 
@@ -73,10 +88,28 @@ def main(argv) -> int:
         slippage_pips=float(bt.get("slippage_pips", 0.2)),
         pip_size=sm.pip_size, pip_value_per_lot_usd=sm.pip_value_per_lot_usd)
 
-    strat_cfg, active_version = resolve_strategy_config(
-        cfg.state_dir, cfg.raw.get("strategy", {}), cfg.config_version)
-    print(f"Active strategy config: v{active_version} (from versioned store HEAD)")
-    strategy = SessionBreakoutER(strat_cfg)
+    # Strategy resolution. Live/promoted path = the ConfigStore HEAD. DEV paths
+    # (--config-file / --strategy) let you backtest an in-development strategy WITHOUT
+    # touching the store, so live production is never disturbed.
+    dev_run = bool(args.config_file or args.strategy)
+    if args.config_file:
+        import yaml
+        raw_dev = yaml.safe_load(Path(args.config_file).read_text(encoding="utf-8")) or {}
+        strat_cfg = raw_dev.get("strategy", raw_dev)
+        strat_cfg.setdefault("config_version", 0)
+        active_version = f"dev-file:{Path(args.config_file).name}"
+    else:
+        strat_cfg, active_version = resolve_strategy_config(
+            cfg.state_dir, cfg.raw.get("strategy", {}), cfg.config_version)
+    if args.strategy:
+        strat_cfg = {**strat_cfg, "name": args.strategy}
+    if dev_run:
+        print("*** DEV RUN — strategy '%s' (%s). NOT the promoted/live config; "
+              "nothing is written to the config store. ***"
+              % (strat_cfg.get("name", "SessionBreakoutER"), active_version))
+    else:
+        print(f"Active strategy config: v{active_version} (from versioned store HEAD)")
+    strategy = build_strategy(strat_cfg)
     governor = RiskGovernor(cfg.risk)
 
     engine = EventDrivenBacktester(strategy, governor, sm, cost,

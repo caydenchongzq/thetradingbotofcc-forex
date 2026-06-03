@@ -19,7 +19,7 @@ from datetime import date, datetime, timezone
 
 from src.common.config import AppConfig, load_config
 from src.common.timeutil import ensure_utc, ftmo_day_start, is_new_ftmo_day, utc_iso
-from src.engine import SessionBreakoutER
+from src.engine import build_strategy
 from src.engine.decide import decide_entry, decide_manage
 from src.ops import (Severity, append_alert_file, backoff_delay, engage_killswitch,
                      format_alert, killswitch_engaged, ping_healthcheck,
@@ -86,9 +86,12 @@ class LiveEngine:
         strat_cfg, version = resolve_strategy_config(
             self.cfg.state_dir, self.cfg.raw.get("strategy", {}), self.cfg.config_version)
         if force or version != self._active_version:
-            self._strategy = SessionBreakoutER(strat_cfg)
+            # Live always builds from the promoted HEAD config -> only ever runs the
+            # promoted strategy (dev strategies are never in the store). See registry.py.
+            self._strategy = build_strategy(strat_cfg)
             self._active_version = version
-            self._alert(Severity.INFO, "config loaded", f"strategy config v{version}")
+            self._alert(Severity.INFO, "config loaded",
+                        f"strategy {strat_cfg.get('name', 'SessionBreakoutER')} config v{version}")
 
     def _alert(self, severity: Severity, event: str, detail: str = "") -> None:
         msg = format_alert(severity, event, detail, env=self.cfg.env,

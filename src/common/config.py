@@ -98,6 +98,18 @@ class ExecutionConfig:
 
 
 @dataclass(frozen=True)
+class AlertsConfig:
+    """Alert secrets, resolved from the environment / .env (spec 07 §5/§6)."""
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
+    healthchecks_url: str | None = None
+
+    @property
+    def telegram_configured(self) -> bool:
+        return bool(self.telegram_bot_token and self.telegram_chat_id)
+
+
+@dataclass(frozen=True)
 class AppConfig:
     env: str
     state_dir: Path
@@ -107,6 +119,7 @@ class AppConfig:
     risk: RiskConfig
     mt5: MT5Config
     execution: ExecutionConfig
+    alerts: AlertsConfig
     strategy: dict[str, Any]
     raw: dict[str, Any]
 
@@ -203,6 +216,12 @@ def load_config(
         terminal_path=env.get("TBOT_MT5_TERMINAL_PATH") or None,
     )
 
+    alerts = AlertsConfig(
+        telegram_bot_token=env.get("TBOT_TELEGRAM_BOT_TOKEN") or None,
+        telegram_chat_id=env.get("TBOT_TELEGRAM_CHAT_ID") or None,
+        healthchecks_url=env.get("TBOT_HEALTHCHECKS_URL") or None,
+    )
+
     exec_raw = raw.get("execution", {}) or {}
     strategy = raw.get("strategy", {}) or {}
     execution = ExecutionConfig(
@@ -220,6 +239,7 @@ def load_config(
         risk=RiskConfig.from_dict(raw.get("risk", {}) or {}),
         mt5=mt5,
         execution=execution,
+        alerts=alerts,
         strategy=strategy,
         raw=raw,
     )

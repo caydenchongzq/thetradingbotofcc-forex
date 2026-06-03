@@ -12,7 +12,7 @@ from src.execution.broker import (
     SymbolView,
     TerminalView,
 )
-from src.execution.broker import TRADE_RETCODE_DONE
+from src.execution.broker import TRADE_RETCODE_DONE, RateBar
 from src.journal import Journal
 
 MAGIC = 770042
@@ -51,6 +51,8 @@ class FakeBroker:
                                  tick_time_epoch=1_900_000_000)
         self._init_ok = True
         self._login_ok = True
+        self.server_offset_s = 10800   # +3h, like FTMO summer
+        self.rates: list = []          # list[RateBar], set by tests
 
     # connection
     def initialize(self, path): self.events.append(("initialize", path)); return self._init_ok
@@ -92,6 +94,12 @@ class FakeBroker:
             self._positions = [p for p in self._positions if p.ticket != order.position]
         return OrderSendResult(retcode=retcode, order=self._ticket, deal=self._ticket,
                                price=price, volume=order.volume, comment="done")
+
+    def copy_rates(self, symbol, timeframe_min, count):
+        return list(self.rates[-count:])
+
+    def server_utc_offset_seconds(self, symbol):
+        return self.server_offset_s
 
     # test helpers
     def add_position(self, comment, magic=None, ticket=None, symbol="EURUSD"):

@@ -148,6 +148,18 @@ class OrderSendResult:
     comment: str = ""
 
 
+@dataclass(frozen=True)
+class RateBar:
+    """A raw OHLC bar from MT5 (time in the broker's server timezone, as epoch seconds)."""
+    time: int
+    open: float
+    high: float
+    low: float
+    close: float
+    tick_volume: float = 0.0
+    spread: float = 0.0
+
+
 class Broker(Protocol):
     def initialize(self, path: str | None) -> bool: ...
     def login(self, login: int, password: str, server: str) -> bool: ...
@@ -161,6 +173,8 @@ class Broker(Protocol):
     def orders_get(self, symbol: str | None = None) -> list[PendingView]: ...
     def history_deals_get(self, since_epoch: int) -> list[DealView]: ...
     def order_send(self, order: BrokerOrder) -> OrderSendResult: ...
+    def copy_rates(self, symbol: str, timeframe_min: int, count: int) -> list[RateBar]: ...
+    def server_utc_offset_seconds(self, symbol: str) -> int: ...
 
 
 class RealMT5Broker:
@@ -280,3 +294,21 @@ class RealMT5Broker:
             return OrderSendResult(retcode=-1, comment=str(mt5.last_error()))
         return OrderSendResult(retcode=res.retcode, order=res.order, deal=res.deal,
                                price=res.price, volume=res.volume, comment=res.comment)
+
+    # --- market data (live runner) ---
+    def copy_rates(self, symbol: str, timeframe_min: int, count: int) -> list[RateBar]:
+        tf = {1: self._mt5.TIMEFRAME_M1, 5: self._mt5.TIMEFRAME_M5,
+              15: self._mt5.TIMEFRAME_M15, 30: self._mt5.TIMEFRAME_M30,
+              60: self._mt5.TIMEFRAME_H1}.get(timeframe_min, self._mt5.TIMEFRAME_M15)
+        rows = self._mt5.copy_rates_from_pos(symbol, tf, 0, count)
+        return [RateBar(time=int(r["time"]), open=float(r["open"]), high=float(r["high"]),
+                        low=float(r["low"]), close=float(r["close"]),
+                        tick_volume=float(r["tick_volume"]), spread=float(r["spread"]))
+                for r in (rows if rows is not None else [])]
+
+    def server_utc_offset_seconds(self, symbol: str) -> int:
+        import time as _t
+        tick = self._mt5.symbol_info_tick(symbol)
+        if tick is None or not tick.time:
+            return 0
+        return round((tick.time - _t.time()) / 3600.0) * 3600

@@ -74,3 +74,19 @@ def test_env_file_strips_inline_comments_but_keeps_hash_in_values(tmp_path):
     # And the float conversion that previously crashed now succeeds.
     cfg = load_config(env=parsed, config_file="config/default.yaml")
     assert cfg.account.initial == 100_000
+
+
+def test_alerts_resolved_from_env():
+    cfg = load_config(env={"TBOT_TELEGRAM_BOT_TOKEN": "123:abc",
+                           "TBOT_TELEGRAM_CHAT_ID": "999",
+                           "TBOT_HEALTHCHECKS_URL": "https://hc.io/abc"},
+                      config_file="config/default.yaml")
+    assert cfg.alerts.telegram_configured is True
+    assert cfg.alerts.telegram_bot_token == "123:abc"
+    assert cfg.alerts.healthchecks_url == "https://hc.io/abc"
+
+
+def test_alerts_unconfigured_by_default():
+    cfg = load_config(env={}, config_file="config/default.yaml")
+    assert cfg.alerts.telegram_configured is False
+    assert cfg.alerts.healthchecks_url is None

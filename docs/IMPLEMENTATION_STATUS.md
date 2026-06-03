@@ -15,7 +15,9 @@ Build order: **04 journal → 02 risk → 03 execution → 05 backtest → 01 st
 | **A4 (code)** | **Strategy engine** (01) — `SessionBreakoutER`: ER + Wilder ATR, DST-aware session gate, opening-range breakout + one-shot, regime gate, blackout (fail-closed), exit plan, move-BE | `tests/engine/` (incl. real-strategy-through-real-harness run) |
 | A6 (partial) | Proposal allowed-lever validation (06 §3) | `tests/agents/` |
 
-`178 passed`. Run: `python -m pytest`.
+`190 passed`. Run: `python -m pytest`.
+
+**Live decision loop (A5):** `src/engine/run.py` `_on_tick` now fetches closed bars from MT5, reads live account/day-state (00:00 reset), runs the same strategy->Governor->Execution chain the backtester validated (`src/engine/decide.py`), journals trades, and is idempotent per bar. The full path is tested end-to-end with a FakeBroker (`tests/engine/test_live_loop.py`) — no MT5 needed. Ready to forward-test on the FTMO free trial once `.env` + Algo Trading are set.
 
 ## Scripts (Windows host w/ MT5)
 - `scripts/mt5_probe.py` — read-only terminal/account/symbol check.

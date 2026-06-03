@@ -193,3 +193,33 @@ def test_reconcile_matches_by_ticket_when_comment_lost(state_dir):
     assert report.adopted == 0
     assert report.flatten_required is False
     j.close()
+
+
+def test_recent_closed_bars_drops_forming_and_converts_to_utc(state_dir):
+    from datetime import timezone
+    from src.execution.broker import RateBar
+    b = FakeBroker()
+    b.server_offset_s = 10800  # +3h server tz
+    # 3 server-time bars at 15:00,15:15,15:30 server == 12:00,12:15,12:30 UTC
+    base = 1_900_000_000
+    b.rates = [RateBar(time=base + 900 * i, open=1.10, high=1.1005, low=1.0995,
+                       close=1.10 + 0.0001 * i, tick_volume=100, spread=2) for i in range(3)]
+    j = SpyJournal(state_dir, [])
+    a = _adapter(b, j)
+    bars = a.recent_closed_bars(count=2, timeframe_min=15)
+    assert len(bars) == 2                                  # forming (last) bar dropped
+    assert bars[0].ts_open_utc == __import__("datetime").datetime.fromtimestamp(
+        base - 10800, tz=timezone.utc)                     # server-tz converted to UTC
+    assert all(x.is_closed for x in bars)
+    j.close()
+
+
+def test_account_state_reads_live_equity_and_freshness(state_dir):
+    b = FakeBroker()
+    j = SpyJournal(state_dir, [])
+    a = _adapter(b, j)
+    a.health(now_epoch=b.symbol.tick_time_epoch)           # prime freshness (first sighting)
+    acct = a.account_state(now_epoch=b.symbol.tick_time_epoch + 10)
+    assert acct.balance == 100_000.0 and acct.currency == "USD"
+    assert acct.is_fresh is True
+    j.close()

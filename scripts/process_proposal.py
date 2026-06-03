@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import json
 import sys
 from datetime import datetime, timezone
@@ -43,7 +44,10 @@ def main(argv) -> int:
     ap.add_argument("proposal", help="path to a proposal JSON")
     ap.add_argument("--approve", action="store_true", help="promote if it PASSES")
     ap.add_argument("--data", default=None)
+    ap.add_argument("--state", default=None, help="override TBOT_STATE_DIR")
     args = ap.parse_args(argv)
+    if args.state:
+        os.environ["TBOT_STATE_DIR"] = args.state
 
     cfg = load_config()
     bt = cfg.raw.get("backtest", {})

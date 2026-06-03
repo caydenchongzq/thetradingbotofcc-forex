@@ -6,27 +6,47 @@ Wires the deterministic spine together for live trading:
   session boundary), run strategy -> Risk Governor -> Execution, journal everything,
   ping the heartbeat. Any stale/degraded state resolves to hold/flatten — never a guess.
 
-The MT5-bound paths run only on the Windows host; this module imports cleanly anywhere
-(the broker is created lazily) so the logic can be reviewed/tested off-Windows. The
-bar-driven decision is the same code the backtester drives, so live == backtest.
+The bar-driven decision is the same code the backtester drives, so live == backtest.
 """
 
 from __future__ import annotations
 
-import os
+import logging
+import logging.handlers
 import time
 from datetime import date, datetime, timezone
 
 from src.common.config import AppConfig, load_config
-from src.common.timeutil import ensure_utc
-from src.engine import SessionBreakoutER, to_risk_signal
-from src.engine.types import Signal as EngineSignal
-from src.execution.types import OrderIntent
-from src.ops import (Severity, backoff_delay, backup_state, format_alert,
-                     killswitch_engaged, ping_healthcheck, resolve_strategy_config,
-                     send_telegram)
-from src.risk.governor import RiskGovernor
-from src.risk.types import AccountState
+from src.common.timeutil import ensure_utc, ftmo_day_start, is_new_ftmo_day, utc_iso
+from src.engine import SessionBreakoutER
+from src.engine.decide import decide_entry, decide_manage
+from src.ops import (Severity, backoff_delay, format_alert, killswitch_engaged,
+                     ping_healthcheck, resolve_strategy_config, send_telegram)
+from src.risk.envelope import compute_envelope
+from src.risk.governor import RiskGovernor, apply_daily_reset
+from src.risk.types import ContextBias, DayState
+
+log = logging.getLogger("ftmo.engine")
+
+
+def configure_logging(state_dir) -> None:
+    """Console + rotating file logging so a forward test is observable."""
+    from pathlib import Path
+    logs = Path(state_dir) / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    root = logging.getLogger("ftmo")
+    if root.handlers:
+        return
+    root.setLevel(logging.INFO)
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s",
+                            datefmt="%Y-%m-%d %H:%M:%S")
+    con = logging.StreamHandler()
+    con.setFormatter(fmt)
+    fileh = logging.handlers.RotatingFileHandler(
+        logs / "engine.log", maxBytes=5_000_000, backupCount=10, encoding="utf-8")
+    fileh.setFormatter(fmt)
+    root.addHandler(con)
+    root.addHandler(fileh)
 
 
 def session_date(now_utc: datetime, tz) -> date:
@@ -34,27 +54,17 @@ def session_date(now_utc: datetime, tz) -> date:
     return ensure_utc(now_utc).astimezone(tz).date()
 
 
-def _expand_env(d: dict) -> dict:
-    """Resolve ``${VAR}`` placeholders (e.g. secrets) against the process environment."""
-    out = {}
-    for k, v in (d or {}).items():
-        if isinstance(v, str) and v.startswith("${") and v.endswith("}"):
-            out[k] = os.environ.get(v[2:-1])
-        else:
-            out[k] = v
-    return out
-
-
 class LiveEngine:
     def __init__(self, app_cfg: AppConfig):
         self.cfg = app_cfg
-        self.alerts = _expand_env(app_cfg.raw.get("ops", {}).get("alerts", {}))
+        self.alerts = app_cfg.alerts            # resolved from env/.env by the loader
         self.governor = RiskGovernor(app_cfg.risk)
         self._broker = None
         self._exec = None
         self._strategy = None
         self._active_version = None
         self._last_session_date = None
+        self._last_bar_ts = None
 
     # ---- lazy MT5 wiring (Windows host only) ----
     def _connect(self):
@@ -63,8 +73,6 @@ class LiveEngine:
         from src.journal import Journal
         broker = RealMT5Broker()
         journal = Journal(self.cfg.state_dir)
-        # The request-funding callback debits the Governor's day-state counter; wired to
-        # the persisted DayState in the full integration.
         self._exec = MT5Execution(broker, journal, self.cfg.mt5, self.cfg.execution,
                                   fund_request=lambda n, rr: True)
         self._broker = broker
@@ -82,13 +90,24 @@ class LiveEngine:
     def _alert(self, severity: Severity, event: str, detail: str = "") -> None:
         msg = format_alert(severity, event, detail, env=self.cfg.env,
                            symbol=self.cfg.execution.symbol)
-        send_telegram(self.alerts.get("telegram_bot_token"),
-                      self.alerts.get("telegram_chat_id"), msg)
+        log.log(logging.WARNING if severity is not Severity.INFO else logging.INFO,
+                "ALERT %s: %s %s", severity.value, event, detail)
+        send_telegram(self.alerts.telegram_bot_token, self.alerts.telegram_chat_id, msg)
 
     # ---- the supervised loop ----
     def run(self, *, poll_seconds: int = 5, max_iterations: int | None = None) -> None:
+        configure_logging(self.cfg.state_dir)
+        log.info("starting engine: env=%s symbol=%s magic=%s state=%s", self.cfg.env,
+                 self.cfg.execution.symbol, self.cfg.execution.magic, self.cfg.state_dir)
         self._connect()
+        acct = self._exec.account_state()
+        log.info("connected: balance=%.2f equity=%.2f %s | strategy v%s session %s-%s %s",
+                 acct.balance, acct.equity, acct.currency, self._active_version,
+                 self._strategy.win_start, self._strategy.win_end, self._strategy.tz.key)
         report = self._exec.reconcile_on_startup()
+        log.info("reconciled: matched=%s adopted=%s orphaned=%s flatten_required=%s",
+                 report.matched, report.adopted, report.orphaned_intents,
+                 report.flatten_required)
         if report.flatten_required:
             self._alert(Severity.CRITICAL, "reconciliation ambiguity",
                         "holding; human review required")
@@ -97,6 +116,7 @@ class LiveEngine:
 
         disconnects = 0
         i = 0
+        heartbeat_every = max(1, 60 // poll_seconds)
         while max_iterations is None or i < max_iterations:
             i += 1
             try:
@@ -112,8 +132,13 @@ class LiveEngine:
                     continue
                 disconnects = 0
                 self._on_tick(ensure_utc(datetime.now(tz=timezone.utc)))
-                ping_healthcheck(self.alerts.get("healthchecks_url"))  # alive+connected+fresh
+                ping_healthcheck(self.alerts.healthchecks_url)  # alive+connected+fresh
+                if i % heartbeat_every == 0:
+                    log.info("alive: trade_allowed=%s data_fresh=%s last_bar=%s",
+                             health.trade_allowed, health.data_fresh,
+                             self._last_bar_ts.isoformat() if self._last_bar_ts else "—")
             except Exception as exc:  # never let the loop die silently
+                log.exception("loop exception")
                 self._alert(Severity.CRITICAL, "loop exception", str(exc))
             time.sleep(poll_seconds)
 
@@ -123,10 +148,144 @@ class LiveEngine:
         if sd != self._last_session_date:
             self._reload_active_config()
             self._last_session_date = sd
-        # On each CLOSED bar the engine would: pull recent bars from MT5, run
-        # strategy.evaluate -> Governor.evaluate_entry -> Execution.place, and manage open
-        # positions. The decision code is identical to the backtester's loop (live==backtest).
-        # Bar fetching is MT5-IPC and validated on the Windows host.
+
+        warmup = self._strategy.warmup_bars()
+        bars = self._exec.recent_closed_bars(count=warmup + 400,
+                                             timeframe_min=self._strategy.tf_min)
+        if not bars:
+            return
+        last_ts = ensure_utc(bars[-1].ts_open_utc)
+        if self._last_bar_ts is not None and last_ts <= self._last_bar_ts:
+            return                      # no NEW closed bar yet -> act at most once per bar
+        self._last_bar_ts = last_ts
+
+        account = self._exec.account_state()
+        if not account.is_fresh:        # stale/degraded -> hold, never guess (spec 02/07)
+            self._alert(Severity.WARN, "stale account read", "holding this bar")
+            return
+        day = self._load_day_state(account, now)
+        env = compute_envelope(day.balance_0000, day.initial, account.equity)
+        log.info("new bar %s | equity=%.2f day_pct_used=%.1f%% killswitch=%s",
+                 last_ts.isoformat(), account.equity, 100 * env.daily_pct_used,
+                 day.killswitch.value)
+
+        open_positions = self._exec.open_positions()      # filtered by our magic
+        if open_positions:
+            self._manage(open_positions[0], bars, now, account, day)
+            return
+
+        client_id = f"{self.cfg.execution.symbol}-{last_ts.strftime('%Y%m%dT%H%M')}"
+        d = decide_entry(self._strategy, self.governor, bars, account, day,
+                         self._exec.symbol_meta(), now, ContextBias.NORMAL, None,
+                         client_id=client_id, magic=self.cfg.execution.magic,
+                         pending_orders_count=len(self._exec.pending_orders()))
+        log.info("decision: %s (%s)", d.action, d.reason)
+        if d.action == "enter" and d.intent is not None:
+            res = self._exec.place(d.intent)
+            self._journal_entry(d, res)
+            self._alert(Severity.INFO, "entry placed",
+                        f"{d.intent.side} {d.intent.volume_lots} @ {d.intent.price} "
+                        f"(risk ${d.risk_decision.risk_usd:.0f})")
+        elif d.action == "vetoed":
+            self._exec.journal.append({
+                "record_type": "reject", "schema_version": 3,
+                "config_version": self._active_version, "ts_utc": utc_iso(now),
+                "instrument": self.cfg.execution.symbol, "stage": "risk",
+                "reason": d.reason,
+                "risk_checks": d.risk_decision.checks if d.risk_decision else None})
+
+    def _manage(self, pos, bars, now, account, day) -> None:
+        class _View:
+            direction = "long" if pos.type == 0 else "short"
+            entry_price = pos.price_open
+            sl_price = pos.sl
+            tp_price = pos.tp
+        d = decide_manage(self._strategy, self.governor, _View(), bars, now, account, day)
+        if d.action == "close":
+            self._exec.close(pos.ticket)
+            self._alert(Severity.INFO, "position closed", f"ticket {pos.ticket}")
+        elif d.action == "modify_sl" and d.new_sl is not None:
+            self._exec.modify_sl_tp(pos.ticket, d.new_sl, (pos.tp,))
+            log.info("moved SL on ticket %s -> %s", pos.ticket, d.new_sl)
+
+    def _load_day_state(self, account, now) -> DayState:
+        day = self._exec.journal.get_day_state()
+        if day is None:
+            # Cold boot: capture balance_0000 from current balance, size conservatively.
+            day = DayState(balance_0000=account.balance, initial=self.cfg.account.initial,
+                           reset_ts_utc=ftmo_day_start(now))
+            self._exec.journal.put_day_state(day)
+        elif is_new_ftmo_day(day.reset_ts_utc, now):
+            day = apply_daily_reset(day, account.balance, ftmo_day_start(now))
+            self._exec.journal.put_day_state(day)
+        return day
+
+    def _journal_entry(self, decision, exec_result) -> None:
+        sig = decision.signal
+        self._exec.journal.append({
+            "record_type": "trade", "trade_id": decision.intent.client_id,
+            "schema_version": 3, "config_version": self._active_version,
+            "ts_utc": utc_iso(sig.ts_decision_utc),
+            "instrument": self.cfg.execution.symbol,
+            "signal": {"session": sig.session, "direction": sig.direction.value,
+                       "breakout_level": sig.breakout_level, "er": sig.regime.er,
+                       "atr_pips": sig.regime.atr_pips,
+                       "regime_gate_passed": sig.regime.regime_gate_passed,
+                       "entry_reason": sig.entry_reason},
+            "regime": {"er": sig.regime.er, "atr_pips": sig.regime.atr_pips,
+                       "vol_state": sig.regime.vol_state.value},
+            "sizing": {"lots": decision.intent.volume_lots,
+                       "risk_usd": decision.risk_decision.risk_usd,
+                       "sl_distance_pips": sig.exit_plan.initial_sl_pips},
+            "fills": {"entry_req_price": decision.intent.price,
+                      "entry_fill_price": exec_result.fill_price,
+                      "entry_slippage_pips": exec_result.slippage_pips},
+        })
+
+    # ---- one-shot / diagnostic modes (forward-test helpers) ----
+    def run_once(self) -> int:
+        """Connect, reconcile, run exactly ONE tick, then exit. For on-demand checks."""
+        configure_logging(self.cfg.state_dir)
+        self._connect()
+        rep = self._exec.reconcile_on_startup()
+        if rep.flatten_required:
+            log.error("reconciliation ambiguity — not trading"); return 1
+        self._on_tick(ensure_utc(datetime.now(tz=timezone.utc)))
+        return 0
+
+    def diagnose(self) -> int:
+        """Print WHY the engine would/wouldn't trade right now: session, freshness, the
+        live regime read (ER/ATR/vol_state), and what evaluate() returns. Places nothing."""
+        configure_logging(self.cfg.state_dir)
+        self._connect()
+        now = ensure_utc(datetime.now(tz=timezone.utc))
+        lon = now.astimezone(self._strategy.tz)
+        in_session = self._strategy.win_start <= lon.time() < self._strategy.win_end
+        bars = self._exec.recent_closed_bars(count=self._strategy.warmup_bars() + 400,
+                                             timeframe_min=self._strategy.tf_min)
+        acct = self._exec.account_state()
+        log.info("=== DIAGNOSE ===")
+        log.info("now: %s UTC = %s %s | in_session=%s (window %s-%s)",
+                 now.strftime("%H:%M"), lon.strftime("%H:%M"), self._strategy.tz.key,
+                 in_session, self._strategy.win_start, self._strategy.win_end)
+        log.info("account: balance=%.2f equity=%.2f fresh=%s | bars_loaded=%d last_bar=%s",
+                 acct.balance, acct.equity, acct.is_fresh, len(bars),
+                 bars[-1].ts_open_utc.isoformat() if bars else "none")
+        if bars:
+            r = self._strategy._regime(bars)
+            log.info("regime: ER=%.3f (thr %.2f) ATR=%.1f pips pct=%.2f vol_state=%s "
+                     "-> gate_passed=%s", r.er, r.er_threshold, r.atr_pips,
+                     r.atr_percentile, r.vol_state.value, r.regime_gate_passed)
+            res = self._strategy.evaluate(bars, now, ContextBias.NORMAL, None)
+            from src.engine.types import Signal as _Sig
+            if isinstance(res, _Sig):
+                log.info("evaluate -> SIGNAL %s breakout@%s SL=%s",
+                         res.direction.value, res.breakout_level,
+                         res.exit_plan.initial_sl_price)
+            else:
+                log.info("evaluate -> NoSignal(%s)", res.reason)
+        log.info("(diagnose only — no order placed)")
+        return 0
 
     def _flatten_and_halt(self, reason: str) -> None:
         for pos in self._exec.open_positions():
@@ -135,11 +294,22 @@ class LiveEngine:
         # Latched: never auto-resumes after a risk-driven kill (mirrors Governor FLATTEN).
 
 
-def main() -> int:
-    cfg = load_config()
-    LiveEngine(cfg).run()
+def main(argv=None) -> int:
+    import argparse
+    ap = argparse.ArgumentParser(description="FTMO EURUSD live engine")
+    ap.add_argument("--once", action="store_true", help="run one tick and exit")
+    ap.add_argument("--diagnose", action="store_true",
+                    help="print session/regime/evaluate diagnostics and exit (no order)")
+    args = ap.parse_args(argv)
+    eng = LiveEngine(load_config())
+    if args.diagnose:
+        return eng.diagnose()
+    if args.once:
+        return eng.run_once()
+    eng.run()
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    import sys
+    raise SystemExit(main(sys.argv[1:]))

@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,12 +36,15 @@ def main(argv) -> int:
     ap.add_argument("--trials", type=int, default=1,
                     help="cumulative trial count (raises the deflated-Sharpe bar)")
     ap.add_argument("--data", default=None, help="override parquet path")
+    ap.add_argument("--state", default=None, help="override TBOT_STATE_DIR")
     ap.add_argument("--initial", type=float, default=None,
                     help="account initial balance (e.g. 10000 for an FTMO 10k)")
     ap.add_argument("--walkforward", action="store_true",
                     help="time-fold OOS stability + held-out lockbox verdict (spec 05 §7)")
     ap.add_argument("--lockbox-months", type=int, default=6)
     args = ap.parse_args(argv)
+    if args.state:
+        os.environ["TBOT_STATE_DIR"] = args.state
 
     cfg = load_config()
     bt = cfg.raw.get("backtest", {})

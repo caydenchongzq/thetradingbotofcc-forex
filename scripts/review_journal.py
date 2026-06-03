@@ -8,7 +8,9 @@ Exits cleanly with "no trades yet" until the engine is forward-testing."""
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,7 +21,13 @@ from src.agents.drift import cusum_state, drift_action     # noqa: E402
 from src.common.config import load_config                  # noqa: E402
 
 
-def main() -> int:
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description="Performance Reviewer (deterministic stats)")
+    ap.add_argument("--state", default=None,
+                    help="state dir to read (e.g. a synced copy of the VPS journal)")
+    args = ap.parse_args(argv)
+    if args.state:
+        os.environ["TBOT_STATE_DIR"] = args.state
     cfg = load_config()
     state = Path(cfg.state_dir)
     if not (state / "live.sqlite").exists():
@@ -71,4 +79,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

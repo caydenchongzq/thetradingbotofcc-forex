@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from typing import Callable
 
 from src.common.config import ExecutionConfig, MT5Config
-from src.risk.types import SymbolMeta
+from src.risk.types import AccountState, SymbolMeta
 
 from .broker import Broker, BrokerOrder, SymbolView
 from .logic import (
@@ -129,6 +129,32 @@ class MT5Execution:
         if sv is None:
             raise ConnectionError_(f"symbol_info({self.cfg.symbol!r}) returned None")
         return _symbol_meta_from_view(sv)
+
+    # ----------------------------------------------------- market data (live)
+    def recent_closed_bars(self, count: int, timeframe_min: int = 15):
+        """Return the last ``count`` CLOSED bars as engine Bars in UTC (drops the
+        currently-forming bar). MT5 bar times are server-tz; converted via the offset."""
+        from src.engine.types import Bar as EngineBar
+        offset = self.broker.server_utc_offset_seconds(self.cfg.symbol)
+        rates = self.broker.copy_rates(self.cfg.symbol, timeframe_min, count + 1)
+        closed = rates[:-1] if len(rates) > 1 else rates   # last bar is still forming
+        out = []
+        for r in closed:
+            ts = datetime.fromtimestamp(r.time - offset, tz=timezone.utc)
+            out.append(EngineBar(ts_open_utc=ts, open=r.open, high=r.high, low=r.low,
+                                 close=r.close, volume=r.tick_volume, is_closed=True))
+        return out
+
+    def account_state(self, now_epoch: float | None = None) -> AccountState:
+        """Live account equity/balance + freshness for the Risk Governor (read every
+        decision, never cached across decisions, spec 02 §3)."""
+        acct = self.broker.account_info()
+        h = self.health(now_epoch)
+        fresh = bool(acct is not None and h.terminal_connected and h.data_fresh)
+        return AccountState(
+            equity=acct.equity if acct else 0.0, balance=acct.balance if acct else 0.0,
+            currency=acct.currency if acct else self.cfg.symbol[-3:],
+            ts_utc=datetime.now(tz=timezone.utc), is_fresh=fresh)
 
     # --------------------------------------------------------- reconciliation
     def reconcile_on_startup(self, lookback_hours: int = 72) -> ReconcileReport:

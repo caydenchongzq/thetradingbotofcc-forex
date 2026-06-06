@@ -79,3 +79,8 @@ Promotions are rare during a forward test — keep this manual; automate only in
 - VPS: `state\logs\engine.log` shows heartbeats + per-bar decisions; Telegram fires on entries/alerts.
 - Local: the `ftmo-reviewer` task posts a daily summary once trades exist; watch for drift flags.
 - Confirm positions in MT5 == the journal; request count well under 2,000/day.
+
+```
+taskkill /F /IM terminal64.exe
+tasklist | findstr terminal
+```

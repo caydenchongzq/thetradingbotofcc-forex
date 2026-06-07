@@ -18,6 +18,7 @@ Start with the roadmap, then build bottom-up along the dependency graph.
 | 05 | [backtest-harness](05-backtest-harness.md) | Event-driven loop + vectorbt; FTMO sim; gates; anti-overfit | R6 |
 | 06 | [improvement-loop](06-improvement-loop.md) | AI agents; **pluggable runtime (Cowork/Max → API)**; proposals; config versioning | R5 |
 | 07 | [ops-deployment](07-ops-deployment.md) | Supervision, watchdog, alerting, secrets, backups; **local→VPS phasing** | R7 |
+| 08 | [research-engine](08-research-engine.md) | Automated daily strategy R&D: online research → knowledge base → dev-isolated build → backtest → report | extends 06 |
 
 ## Build order (from 00)
 
@@ -41,6 +42,4 @@ Journal first (it's the contract); risk before reward; strategy built last in th
 
 - **Phase A** — local Windows PC + AI loop as Cowork scheduled tasks on the Max plan (dev → demo → free-trial → challenge).
 - **Phase B** — migrate live engine to a London Windows VPS before the funded account.
-- **Phase C** — swap the agent runtime to the Claude Agent SDK + Batch API on a separate Linux box.
-
-The phasing changes *where things run* and *how the AI loop is powered* — never the deterministic spine or the agent contract.
+- **Phase C** — swap the agent runtime to the Claude 

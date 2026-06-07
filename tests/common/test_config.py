@@ -15,6 +15,16 @@ def test_loads_defaults_from_yaml():
     assert cfg.strategy["instrument"] == "EURUSD"
 
 
+def test_weekly_trial_cap_from_yaml():
+    """Spec 08 §4.1 — the trial budget is a config value, not a code constant.
+
+    process_proposal.py reads improvement_loop.trial_budget_per_week (fallback 4);
+    the ramp-up value is 10 (2026-06-07, revisit at the M5 review)."""
+    cfg = load_config(env={}, config_file="config/default.yaml")
+    cap = int(cfg.raw.get("improvement_loop", {}).get("trial_budget_per_week", 4))
+    assert cap == 10
+
+
 def test_env_overrides_account_and_state_dir():
     cfg = load_config(
         env={"TBOT_ACCOUNT_INITIAL": "50000", "TBOT_STATE_DIR": "/tmp/state",
@@ -79,14 +89,4 @@ def test_env_file_strips_inline_comments_but_keeps_hash_in_values(tmp_path):
 def test_alerts_resolved_from_env():
     cfg = load_config(env={"TBOT_TELEGRAM_BOT_TOKEN": "123:abc",
                            "TBOT_TELEGRAM_CHAT_ID": "999",
-                           "TBOT_HEALTHCHECKS_URL": "https://hc.io/abc"},
-                      config_file="config/default.yaml")
-    assert cfg.alerts.telegram_configured is True
-    assert cfg.alerts.telegram_bot_token == "123:abc"
-    assert cfg.alerts.healthchecks_url == "https://hc.io/abc"
-
-
-def test_alerts_unconfigured_by_default():
-    cfg = load_config(env={}, config_file="config/default.yaml")
-    assert cfg.alerts.telegram_configured is False
-    assert cfg.alerts.healthchecks_url is None
+                           "TBOT_HEALTHCHECKS_URL": "https

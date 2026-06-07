@@ -35,6 +35,12 @@ Prioritised:
 4. **Second instrument** — per-instrument config profile; prove the pipeline generalises.
 5. **Validation rigor** — Monte-Carlo reshuffle, PBO/CSCV, parameter-stability maps; vectorbt sweep.
 6. **R8 fundamental overlay** — shadow-mode news/macro bias into the context_bias seam.
+7. **Automated research engine (spec 08)** — daily scheduled session: online research →
+   strategy library recall → dev-isolated build → walk-forward → report.
+   **M1–M4 built 2026-06-07**: library at `docs/research/strategies/` (3 seeds),
+   `RESEARCH_ENGINE` agent spec, weekly cap → config (10), `ftmo-research-engine` task
+   daily 08:30 SGT (first run 2026-06-08 = supervised dry run); M5 review one-shot task
+   fires 2026-06-21. Plan: `docs/specs/08-research-engine.md`.
 
 ## (existing detail below)
 ## The deterministic spine is complete (implemented + tested)
@@ -72,9 +78,4 @@ Prioritised:
 | vectorbt sweep | Deferred pre-filter (05 §2). |
 
 ## Broker facts (FTMO Free Trial demo, EURUSD)
-Account 1513571406 @ FTMO-Demo, USD, 1:100, $100k. EURUSD 5-digit, pip $10/lot, lot step 0.01 (min 0.01/max 50), stops_level 0, ~0.1 pip demo spread. FTMO trial reports `trade_mode=0` (expected). Comments not reliably preserved → matching is ticket-keyed.
-
-## Design notes
-- **Broker seam:** all `MetaTrader5` calls isolated in `RealMT5Broker`; adapter logic tested via FakeBroker.
-- **Signal seam:** Governor consumes its own request type (`risk/types.py:Signal`); the loop bridges the engine Signal via `engine/strategy.py:to_risk_signal()`.
-- **Same code, two paths:** the backtester drives the *production* Strategy + RiskGovernor — a passing backtest is a statement about the code that will trade.
+Account 1513571406 @ FTMO-Demo, USD, 1:100, $100k. EURUSD 5-digit, pip $10/lot, lot step 0.01 (min 0.01/max 50), stops_level 0, ~0.1 pip demo spread. FTMO trial reports `trade_mode=0` (expected). Comments not reli

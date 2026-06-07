@@ -1,9 +1,10 @@
-"""Agent specifications (spec 06 §2/§4) — the three Cowork scheduled-task prompts.
+"""Agent specifications (spec 06 §2/§4 + spec 08) — the Cowork scheduled-task prompts.
 
 These are runtime-agnostic AgentSpecs: the same prompts/contract run as Cowork scheduled
 tasks (Phase A) or via the Claude Agent SDK (Phase C). Each agent is restricted to
 read + emit only; it can never write live config or place an order. Promotion stays
-human-approved through Phase A/B.
+human-approved through Phase A/B. The research engine (spec 08) additionally writes
+dev-isolated code + library reports, but never to state/ or the live path.
 """
 
 from __future__ import annotations
@@ -59,8 +60,35 @@ BACKTEST_ANALYST = AgentSpec(
     ),
 )
 
+RESEARCH_ENGINE = AgentSpec(
+    name="research_engine",
+    model_tier="sonnet",
+    allowed_tools=("Read", "Grep", "WebSearch", "WebFetch", "Write", "Edit", "Bash"),
+    output_schema="library_report",
+    prompt=(
+        "You are the Research Engine (spec 08, docs/specs/08-research-engine.md). Run one "
+        "daily strategy-research cycle: (0) read CLAUDE.md, spec 08, and the strategy "
+        "library index docs/research/strategies/INDEX.md; check remaining weekly trial "
+        "budget BEFORE selecting candidates. (1) Recall relevant past reports — especially "
+        "tested-rejected failure modes. (2) Research 3-5 idea candidates online with "
+        "citations. (3) Triage: dedupe against the library; a variant of a rejected idea "
+        "must state what is different and why the recorded failure mode does not apply, "
+        "else discard; select 1-2 within budget, queue the rest as status: idea. "
+        "(4) Build dev-isolated: pure indicators, new Strategy module, register() in the "
+        "registry, unit tests; additive-only edits to shared modules; full pytest must be "
+        "green; NEVER write to state/, never touch the live path, never promote. "
+        "(5) Validate: run_backtest.py --strategy <Name> --walkforward --trials "
+        "<cumulative>, plus an A/B vs the current HEAD; judge on gates + lockbox, never "
+        "raw expectancy. (6) Write a library report from TEMPLATE.md, update INDEX.md, "
+        "append the trial ledger; only if ALL gates pass, write a proposal JSON to "
+        "config/proposals/. (7) Commit code+tests+docs and summarize verdicts and anything "
+        "awaiting human approval. Promotion is always human-only."
+    ),
+)
+
 AGENTS = {
     "performance_reviewer": PERFORMANCE_REVIEWER,
     "strategy_researcher": STRATEGY_RESEARCHER,
     "backtest_analyst": BACKTEST_ANALYST,
+    "research_engine": RESEARCH_ENGINE,
 }

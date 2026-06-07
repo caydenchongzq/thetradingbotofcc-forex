@@ -72,6 +72,13 @@ strategy:
     after_min: 15
     before_2h_close_min: 120
 
+# Improvement loop / research engine governance (specs 06 + 08).
+improvement_loop:
+  # Hard weekly cap on backtested hypotheses (trial ledger). Raised 4 -> 10 on 2026-06-07
+  # for the spec-08 research-engine ramp-up (1-2 candidates/day); every trial still feeds
+  # the cumulative DSR penalty. Revisit at the M5 review (~2026-06-21).
+  trial_budget_per_week: 10
+
 # Backtest harness inputs (spec 05).
 backtest:
   data_path: state/parquet/eurusd_m15.parquet

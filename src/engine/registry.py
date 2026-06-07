@@ -48,3 +48,8 @@ def build_strategy(config: dict) -> Strategy:
 
 # ---- built-in strategies ----
 register(DEFAULT_STRATEGY, SessionBreakoutER)
+
+# ---- research-engine candidates (dev-registered, NOT promoted — spec 08 §5.1) ----
+from .strategy_compression import SessionBreakoutERCompression  # noqa: E402
+
+register("SessionBreakoutERCompression", SessionBreakoutERCompression)

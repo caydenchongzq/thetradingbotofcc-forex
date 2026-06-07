@@ -54,3 +54,31 @@ def percentile_rank(value: float, series: Sequence[float]) -> float:
     if not series:
         return 0.5
     return sum(1 for x in series if x <= value) / len(series)
+
+
+def compression_pct(highs: Sequence[float], lows: Sequence[float],
+                    closes: Sequence[float], recent_n: int, baseline_n: int) -> float:
+    """Volatility-compression percentile (Crabel-style narrow-range concept).
+
+    Mean true range of the LAST `recent_n` bars, ranked within the distribution of the
+    `baseline_n` single-bar true ranges immediately PRECEDING those recent bars.
+    ~0.0 = recent vol far below baseline (compressed); ~1.0 = far above (expanded).
+
+    FAIL-SAFE: any degenerate input (insufficient history, bad lengths, non-finite)
+    returns 1.0 — callers that treat low values as a green light therefore block.
+    Pure function: no state, no clock, no I/O.
+    """
+    if recent_n <= 0 or baseline_n <= 0:
+        return 1.0
+    n = len(highs)
+    if n != len(lows) or n != len(closes) or n < recent_n + baseline_n + 1:
+        return 1.0
+    trs = true_ranges(highs, lows, closes)          # aligned to bars[1:]
+    recent = trs[-recent_n:]
+    baseline = trs[-(recent_n + baseline_n):-recent_n]
+    if len(recent) < recent_n or len(baseline) < baseline_n:
+        return 1.0
+    mean_recent = sum(recent) / len(recent)
+    if not math.isfinite(mean_recent):
+        return 1.0
+    return percentile_rank(mean_recent, baseline)

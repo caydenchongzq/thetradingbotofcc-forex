@@ -1,0 +1,41 @@
+# DEV config — SessionBreakoutERCompression (research-engine candidate 2026-06-07).
+# HEAD v4 params + Crabel-style pre-session volatility-compression entry filter.
+# Single A-PRIORI configuration (median cut, morning=20 bars, baseline=60 TRs) —
+# deliberately NOT swept, so this consumes exactly ONE trial-ledger entry.
+# Run: py scripts/run_backtest.py --config-file config/dev/compression.yaml --walkforward --trials 41
+strategy:
+  name: SessionBreakoutERCompression
+  instrument: EURUSD
+  timeframe: M15
+  pip_size: 0.0001
+  timeframe_minutes: 15
+  session:
+    tz: Europe/London
+    window_start: "13:00"
+    window_end: "16:00"
+    opening_range_minutes: 30
+    one_shot_per_side: true
+  breakout:
+    buffer_pips: 1.5
+  regime:
+    er_window: 14
+    er_threshold: 0.32
+    atr_window: 14
+    atr_floor_pips: 5.0
+    atr_ceiling_pips: 22.0
+    atr_low_pct: 0.2
+    atr_high_pct: 0.9
+  exits:
+    atr_mult_sl: 1.2
+    target_r_multiples: [1.0]
+    partial_fractions: [1.0]
+    move_be_after_r: null
+  blackout:
+    high_impact_currencies: [EUR, USD]
+    before_min: 15
+    after_min: 15
+    before_2h_close_min: 120
+  compression:
+    recent_bars: 20
+    baseline_bars: 60
+    max_pct: 0.50

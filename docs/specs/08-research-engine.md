@@ -57,8 +57,11 @@ CLAUDE.md + this spec. Stages:
 ```
 0 orient   read CLAUDE.md, this spec, library INDEX, ledger budget remaining
 1 recall   read relevant past reports (statuses, failure modes, lessons)
-2 research web-search 3–5 idea candidates with citations (sources: academic preprints
-           SSRN/arXiv q-fin, practitioner forums/blogs, broker/quant publications)
+2 research web-search 3–5 idea candidates with citations. Start from the curated
+           source list `docs/research/strategies/SOURCES.md` (GitHub strategy catalogs,
+           topic crawls) plus academic preprints (SSRN/arXiv q-fin), practitioner
+           forums/blogs, broker/quant publications. Community code is hypothesis-only:
+           re-implement pure, never copy into src/
 3 triage   dedupe vs library; classify each idea:
              (a) improvement to an existing strategy (lever change or structural)
              (b) variant of a past-rejected idea  → MUST state what is different and why
@@ -207,6 +210,4 @@ report in its triage (cites it in "Relation to prior work").
   (`improvement_loop.trial_budget_per_week: 10`, read by `process_proposal.py`, unit
   tested); pipeline mechanics smoke-tested (214 tests green, `--list-strategies` OK).
   Scheduled tasks created: `ftmo-research-engine` (daily 08:30 SGT) and one-shot
-  `ftmo-research-engine-m5-review` (2026-06-21). First scheduled run 2026-06-08 — treat
-  it as the supervised M4 dry run. Note: Mondays overlap the `weekly-strategy-optimizer`
-  task (08:00); both draw from the same trial budget.
+  `ftmo-resea

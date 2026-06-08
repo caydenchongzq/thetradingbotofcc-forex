@@ -1,0 +1,35 @@
+# DEV config — AsianSweepFade (research-engine candidate 2026-06-08, spec 08).
+# Single pre-registered configuration; deliberately NOT swept. Run with:
+#   py scripts/run_backtest.py --config-file config/dev/asian_sweep_fade.yaml --walkforward --trials <cumulative>
+# Bypasses the ConfigStore HEAD; writes nothing to state/.
+strategy:
+  name: AsianSweepFade
+  instrument: EURUSD
+  timeframe: M15
+  pip_size: 0.0001
+  timeframe_minutes: 15
+  fade:
+    asian_start: "00:00"      # London time
+    asian_end: "08:00"
+    window_start: "08:00"
+    window_end: "11:00"
+    sweep_buffer_pips: 1.5    # = incumbent's default breakout buffer; not tuned
+    min_asian_bars: 16
+    one_shot_per_side: true
+  regime:                     # measured identically to the incumbent; ER gate INVERTED
+    er_window: 14
+    er_threshold: 0.30        # fade requires ER < threshold (a-priori complement)
+    atr_window: 14
+    atr_floor_pips: 4.0
+    atr_ceiling_pips: 22.0
+    atr_low_pct: 0.20
+    atr_high_pct: 0.90
+  exits:
+    atr_mult_sl: 1.2
+    target_r_multiples: [1.0] # the validated single-1R exit (docs/EXIT_MODEL.md)
+    partial_fractions: [1.0]
+    move_be_after_r: null
+  blackout:
+    high_impact_currencies: [EUR, USD]
+    before_min: 15
+    after_min: 15

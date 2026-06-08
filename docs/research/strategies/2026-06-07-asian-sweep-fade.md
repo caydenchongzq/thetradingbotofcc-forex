@@ -2,11 +2,11 @@
 id: 2026-06-07-asian-sweep-fade
 name: AsianSweepFade
 family: mean-reversion
-status: idea
-related: [2026-06-02-session-breakout-er]
+status: retired
+related: [2026-06-02-session-breakout-er, 2026-06-08-asian-sweep-fade]
 sources: ["https://fxopen.com/blog/en/what-is-ict-turtle-soup-and-how-can-you-use-it-in-trading/", "https://dailypriceaction.com/blog/liquidity-sweep-reversals/", "https://www.forexfactory.com/thread/1349219-eurusd-london-session-manipulation-amd"]
 trials_used: 0
-verdict: "Queued: fade false breakouts of the Asian range in early London (turtle-soup); practitioner-only evidence, no quantified backtests found — the harness must arbitrate."
+verdict: "Retired: tested 2026-06-08 and rejected — see 2026-06-08-asian-sweep-fade (no edge; 0/7 WF folds, lockbox FAIL)."
 ---
 
 # AsianSweepFade — fade the failed Asian-range breakout at London open
@@ -35,5 +35,5 @@ Trade-count headroom looks adequate (sweeps are frequent), but verify with the c
 probe before the gated run (lesson from [[2026-06-07-pre-session-compression-filter]]).
 
 ## Next steps
-Strongest queued candidate for a future run with budget: new strategy module via the
-registry playbook; 1 trial.
+TESTED 2026-06-08 — rejected. See [[2026-06-08-asian-sweep-fade]] for the full report,
+gate table, and the binding failure mode (symmetric-1R sweep fade structurally negative).

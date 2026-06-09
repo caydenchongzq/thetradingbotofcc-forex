@@ -1,0 +1,39 @@
+# SL-width / healthy-R:R baseline sweep  (frozen 2026-06-08, requested by Cayden)
+# Run: py scripts/optimize.py config/optimize/sl_width.yaml --base-trials 79
+#   (--base-trials = the *cumulative* prior trial count so the DSR penalty stays honest;
+#    79 is the count as of 2026-06-08 — take the latest number from the library report,
+#    not the ledger file, which is known to undercount.)
+#
+# QUESTION THIS ANSWERS
+#   "Is the 1.2xATR stop too tight? Does giving the trade more room (1.4-2.0 ATR) while
+#    keeping a healthy R:R (>=1:1) beat HEAD v4 on the held-out lockbox?"
+#   This is the UNTESTED cell: the only prior SL sweep (tp2r.yaml) varied the stop ONLY
+#   alongside >=2R targets, which confounded "wider stop" with "stretched target" and died
+#   on the lockbox. Here target_r is held at 1:1 / 1:1.5, so atr_mult_sl widens the stop AND
+#   the TP together -> pure "more breathing room, R:R stays healthy."
+#
+# ---------------------------------------------------------------------------------------
+# THIS IS A BASELINE STARTING GRID ONLY. IT LOCKS NOTHING.
+#   - It does NOT fix or constrain SL width or R:R for any strategy (HEAD v4 is untouched;
+#     a sweep writes a proposal at most, never auto-promotes).
+#   - It does NOT block other configs, axes, or values from being added to this or any
+#     other sweep. Add more axes freely (full lever reference lives in
+#     config/optimize/exits.yaml) or widen the ranges below — nothing here forecloses that.
+#   - Every combo counts into the cumulative DSR trial penalty, so this file is kept small
+#     on purpose (12 combos). Grow it deliberately, not by default.
+# ---------------------------------------------------------------------------------------
+
+strategy: SessionBreakoutER
+base: head                 # starts from the promoted HEAD (v4); does not modify it
+method: grid               # list-valued axis (target_r_multiples) requires grid
+seed: 0
+objective: oos_expectancy
+lockbox_months: 6
+
+# Grid = 6 x 2 = 12 candidates.
+space:
+  # Stop width in ATR multiples. 1.2 = current HEAD default; this sweeps wider for room.
+  exits.atr_mult_sl:        {min: 1.0, max: 2.0, step: 0.2}   # {1.0,1.2,1.4,1.6,1.8,2.0}
+  # Single full target as a multiple of the stop distance. [1.0]=1:1, [1.5]=1:1.5.
+  # partial_fractions stays [1.0] from HEAD -> 100% out at the target -> live==backtest.
+  exits.target_r_multiples: {values: [[1.0], [1.5]]}

@@ -78,4 +78,9 @@ Prioritised:
 | vectorbt sweep | Deferred pre-filter (05 §2). |
 
 ## Broker facts (FTMO Free Trial demo, EURUSD)
-Account 1513571406 @ FTMO-Demo, USD, 1:100, $100k. EURUSD 5-digit, pip $10/lot, lot step 0.01 (min 0.01/max 50), stops_level 0, ~0.1 pip demo spread. FTMO trial reports `trade_mode=0` (expected). Comments not reli
+Account 1513571406 @ FTMO-Demo, USD, 1:100, $100k. EURUSD 5-digit, pip $10/lot, lot step 0.01 (min 0.01/max 50), stops_level 0, ~0.1 pip demo spread. FTMO trial reports `trade_mode=0` (expected). Comments not reliably preserved → matching is ticket-keyed.
+
+## Design notes
+- **Broker seam:** all `MetaTrader5` calls isolated in `RealMT5Broker`; adapter logic tested via FakeBroker.
+- **Signal seam:** Governor consumes its own request type (`risk/types.py:Signal`); the loop bridges the engine Signal via `engine/strategy.py:to_risk_signal()`.
+- **Same code, two paths:** the backtester drives the *production* Strategy + RiskGovernor — a passing backtest is a statement about the code that will trade.

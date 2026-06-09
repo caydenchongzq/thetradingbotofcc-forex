@@ -77,6 +77,9 @@ ONLY by promoting a config whose `name` is it.
    module): `evaluate()` returns `Signal | NoSignal`, `manage()` returns `ManageDecision`.
    Keep it pure; every degraded path ⇒ `NoSignal`. Give it a `name` and add one
    `register("Name", Class)` line in `src/engine/registry.py`.
+   Choose **exit geometry from the strategy's own mechanism** — stop ~1.0–2.0×ATR, target
+   R:R ≥ 1:1 (1:2–1:3 where a sub-50% win rate is expected). NEVER default to the incumbent's
+   `1.2×ATR / 1R`; justify it or say why 1R fits (spec 08 §5.8).
 3. Wire nothing live yet. Add unit tests under `tests/engine` and `tests/backtest`.
 4. **Validate on real data (dev, store untouched):**
    `py scripts/run_backtest.py --strategy Name --walkforward` + an A/B vs the current HEAD

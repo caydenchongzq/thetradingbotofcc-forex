@@ -155,6 +155,19 @@ The engine writes code, so the dev-isolation rules from CLAUDE.md are tightened:
    arbiter of whether the idea is real.
 7. Sandbox note: long walk-forwards may need chunked execution (known environment
    constraint); prefer resumable, bounded runs over one giant invocation.
+8. **Exit geometry is chosen per mechanism, never defaulted.** A new candidate's stop width
+   and reward target are design decisions that must follow from *its own* mechanism and be
+   justified a priori — not copy-pasted from the incumbent. The reflex of `stop 1.2×ATR,
+   single 1R target` is forbidden as an unexamined inheritance: 1.2×ATR carries no special
+   status (a stop that tight noise-outs trades on some mechanisms; give the trade room when
+   the structure warrants). Pre-register, in the report's Strategy spec, three things with a
+   one-line rationale each: (a) the **stop** as an ATR multiple in the range ~1.0–2.0; (b) the
+   **target** R-multiple giving **R:R ≥ 1:1** (1:1 floor; 1:2–1:3 preferred where the
+   mechanism implies a sub-50% win rate, e.g. fades/sweeps); (c) why this geometry fits *this*
+   strategy. Reusing the validated single-1R exit machinery is allowed only with an explicit
+   "why 1R fits here" — never by default. Exit-geometry choices remain subject to the arbiter:
+   the gates + walk-forward + lockbox decide, and the recorded ≥2R rejections on the incumbent
+   ([[2026-06-07-tp-2r-sweep]]) bind any variant that shares their failure mode (§4.3).
 
 ## 6. Scheduled task
 
@@ -210,4 +223,6 @@ report in its triage (cites it in "Relation to prior work").
   (`improvement_loop.trial_budget_per_week: 10`, read by `process_proposal.py`, unit
   tested); pipeline mechanics smoke-tested (214 tests green, `--list-strategies` OK).
   Scheduled tasks created: `ftmo-research-engine` (daily 08:30 SGT) and one-shot
-  `ftmo-resea
+  `ftmo-research-engine-m5-review` (2026-06-21). First scheduled run 2026-06-08 — treat
+  it as the supervised M4 dry run. Note: Mondays overlap the `weekly-strategy-optimizer`
+  task (08:00); both draw from the same trial budget.

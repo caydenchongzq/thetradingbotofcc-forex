@@ -1,0 +1,9 @@
+{
+  "proposal_id": "2026-06-07-opt-025424",
+  "parent_config_version": 4,
+  "author": "optimizer",
+  "created_utc": "2026-06-07T02:54:24.512187+00:00",
+  "hypothesis": "Optimizer sweep (grid, 22 trials) over ['exits.target_r_multiples', 'exits.move_be_after_r']; best by oos_expectancy=+0.283R OOS. Lockbox checked once.",
+  "diff": [],
+  "status": "proposed"
+}

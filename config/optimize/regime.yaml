@@ -1,0 +1,26 @@
+# Regime-lever sweep (stage 2 of the staged flow — run AFTER exits.yaml).
+# Run: py scripts/optimize.py config/optimize/regime.yaml --base-trials <prior cumulative>
+#
+# All 7 regime axes, but method=random with budget=48: explores the whole space without
+# the ~46k-combo full grid. Random is fine here because every value is a scalar
+# (list-valued axes like target_r_multiples would break random's dedupe).
+
+strategy: SessionBreakoutER
+base: head
+method: random
+budget: 48
+seed: 0
+objective: oos_expectancy
+lockbox_months: 6
+
+space:
+  regime.er_window:        {values: [10, 14, 20]}              # default 14
+  regime.er_threshold:     {min: 0.24, max: 0.36, step: 0.02}  # default 0.30
+  regime.atr_window:       {values: [10, 14, 20]}              # default 14
+  regime.atr_floor_pips:   {min: 3, max: 7, step: 1}           # default 4
+  regime.atr_ceiling_pips: {min: 16, max: 28, step: 2}         # default 22
+  regime.atr_low_pct:      {min: 0.10, max: 0.30, step: 0.05}  # default 0.20
+  regime.atr_high_pct:     {min: 0.80, max: 0.95, step: 0.05}  # default 0.90
+
+# Optional refinement after this run: take the winner's neighborhood and do a small
+# coarse_to_fine or narrow grid (2-3 axes only), adding this run's 48 to --base-trials.

@@ -28,6 +28,12 @@ does not apply (required by spec 08 §4.3 — otherwise do not test).
 Entry / exit / regime gate / session / params, precise enough to implement. Note which
 params should become `ALLOWED_LEVERS` if promoted.
 
+**Exit geometry (required — spec 08 §5.8):** state the **stop** as an ATR multiple
+(~1.0–2.0; 1.2 carries no special status), the **target** R-multiple (R:R ≥ 1:1 floor;
+1:2–1:3 preferred where a sub-50% win rate is expected), and a one-line rationale tying each
+to *this* strategy's mechanism. Do NOT default to `1.2×ATR / 1R` by inheriting the incumbent
+— justify the geometry, or say explicitly why the incumbent's single-1R machinery fits here.
+
 ## Implementation notes
 Files touched (additive only), registry name, unit tests added. Confirm: pytest green,
 no writes to `state/` or the live path. Live-mirror needed? (yes ⇒ flag for human session)

@@ -22,4 +22,7 @@
 | id | name | family | status | one-line |
 |---|---|---|---|---|
 | [2026-06-07-intraday-ts-momentum](2026-06-07-intraday-ts-momentum.md) | IntradayTSMomentum | trend | probe-rejected | early→late session return corr 0.026, mean +0.25 pip < cost (probed 2026-06-09); do not test without a new mechanism |
-| [2026-06-08-london-fix-reversal](2026-06-08-london-fix-reversal.md) | LondonFixReversal | mean-reversion | probe-rejected | post-fix reversion ~0.2 pip < cost, wr 51.8%; month-end subset (19d) below 200-trade floor (prob
+| [2026-06-08-london-fix-reversal](2026-06-08-london-fix-reversal.md) | LondonFixReversal | mean-reversion | probe-rejected | post-fix reversion ~0.2 pip < cost, wr 51.8%; month-end subset (19d) below 200-trade floor (probed 2026-06-09) |
+| [2026-06-07-cross-instrument-confirmation](2026-06-07-cross-instrument-confirmation.md) | CrossInstrumentConfirmation | filter | blocked-on-data | Needs multi-instrument export AND longer history (filter trade-count cap) |
+
+> Retired idea stubs: [2026-06-07-asian-sweep-fade](2026-06-07-asian-sweep-fade.md) (tested 2026-06-08 → rejected).

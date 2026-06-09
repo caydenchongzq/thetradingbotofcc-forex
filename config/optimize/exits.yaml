@@ -1,0 +1,61 @@
+# Exit-lever sweep. Run: py scripts/optimize.py config/optimize/exits.yaml
+# NOTE: keep method=grid — list-valued axes (target_r_multiples) are unhashable and
+# break the dedupe sets used by random / coarse_to_fine.
+
+strategy: SessionBreakoutER
+base: head
+method: grid
+seed: 0
+objective: oos_expectancy
+lockbox_months: 6
+
+# Grid = 3 x 3 = 9 candidates (DSR judged at trial_count=9; pass --base-trials with your
+# cumulative prior trials to keep the penalty honest).
+space:
+  # Single FULL exit at 1R / 2R / 3R (partial_fractions stays [1.0] from HEAD).
+  # A multi-level scale-out (e.g. [[1.0, 2.0]] + partial_fractions [[0.5, 0.5]]) is the
+  # exit model that already FAILED the lockbox (docs/EXIT_MODEL.md) — re-test deliberately,
+  # not by default.
+  exits.target_r_multiples: {values: [[2.0], [2.5], [3.0]]}
+  # null = incumbent (no break-even move). With target [1.0], 1.5/2.0 never trigger
+  # (harmless no-op combos that duplicate HEAD behavior).
+  exits.move_be_after_r:    {values: [null, 1.5, 2.0]}
+
+# ---------------------------------------------------------------------------------------
+# FULL ALLOWED-LEVER REFERENCE (src/agents/proposal.py ALLOWED_LEVERS) with sane ranges.
+# Do NOT enable all at once: the grid is a cartesian product and every combo counts into
+# the DSR trial penalty — a huge sweep guarantees nothing clears the gates. Sweep 2-3 axes
+# per run. Defaults shown are current config/default.yaml values.
+#
+# space:
+#   # --- session ---
+#   session.window_start:           {values: ["12:45", "13:00", "13:15"]}   # default "13:00"
+#   session.window_end:             {values: ["15:30", "16:00", "16:30"]}   # default "16:00"
+#   session.opening_range_minutes:  {values: [15, 30, 45, 60]}              # default 30
+#   session.london_open_buffer_min: {values: [0, 15, 30]}
+#   session.one_shot_per_side:      {values: [true, false]}                 # default true
+#
+#   # --- breakout ---
+#   breakout.buffer_pips:           {min: 0.5, max: 3.0, step: 0.5}         # default 1.5
+#
+#   # --- regime (ER + ATR gate) ---
+#   regime.er_window:               {values: [10, 14, 20]}                  # default 14
+#   regime.er_threshold:            {min: 0.24, max: 0.36, step: 0.02}      # default 0.30
+#   regime.atr_window:              {values: [10, 14, 20]}                  # default 14
+#   regime.atr_floor_pips:          {min: 3, max: 7, step: 1}               # default 4
+#   regime.atr_ceiling_pips:        {min: 16, max: 28, step: 2}             # default 22
+#   regime.atr_low_pct:             {min: 0.10, max: 0.30, step: 0.05}      # default 0.20
+#   regime.atr_high_pct:            {min: 0.80, max: 0.95, step: 0.05}      # default 0.90
+#
+#   # --- exits ---
+#   exits.atr_mult_sl:              {min: 0.8, max: 1.8, step: 0.2}         # default 1.2
+#   exits.target_r_multiples:       {values: [[1.0], [1.5], [2.0], [3.0]]}  # default [1.0]
+#   exits.partial_fractions:        {values: [[1.0]]}    # MUST match target list length
+#   exits.move_be_after_r:          {values: [null, 0.5, 1.0, 1.5, 2.0]}    # default null
+#
+#   # --- trailing (only meaningful if a trail is configured/active) ---
+#   exits.trail.activate_after_r:   {min: 0.5, max: 2.0, step: 0.5}
+#   exits.trail.step_pips:          {min: 1, max: 5, step: 1}
+#   exits.trail.distance_pips:      {min: 4, max: 12, step: 2}
+#   exits.trail.min_seconds_between_modifies: {values: [30, 60, 120]}
+# ---------------------------------------------------------------------------------------

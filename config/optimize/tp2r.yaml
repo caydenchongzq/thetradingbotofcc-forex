@@ -1,0 +1,19 @@
+# Forced >=2R take-profit sweep (user-requested, 2026-06-07). Run:
+#   py scripts/optimize.py config/optimize/tp2r.yaml --base-trials 22
+# Question: can SessionBreakoutER clear the gates with 100% out at >=2R?
+# Single-target only (live exits 100% at broker TP -> live==backtest preserved).
+# move_be_after_r stays null: BE is a management-driven exit NOT mirrored live
+# (docs/EXIT_MODEL.md parity note) and the scaled/BE model already failed the lockbox.
+# atr_mult_sl is swept because the viable stop width likely differs at a 2R+ target.
+
+strategy: SessionBreakoutER
+base: head
+method: grid                    # list-valued axis -> keep grid (see exits.yaml note)
+seed: 0
+objective: oos_expectancy
+lockbox_months: 6
+
+# Grid = 3 x 6 = 18 candidates.
+space:
+  exits.target_r_multiples: {values: [[2.0], [2.5], [3.0]]}
+  exits.atr_mult_sl:        {min: 0.8, max: 1.8, step: 0.2}   # default 1.2

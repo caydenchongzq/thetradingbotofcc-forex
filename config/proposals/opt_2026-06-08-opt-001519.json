@@ -1,0 +1,20 @@
+{
+  "proposal_id": "2026-06-08-opt-001519",
+  "parent_config_version": 4,
+  "author": "optimizer",
+  "created_utc": "2026-06-08T00:15:19.768367+00:00",
+  "hypothesis": "Optimizer sweep (coarse_to_fine, 79 trials) over ['regime.er_threshold', 'regime.atr_floor_pips', 'breakout.buffer_pips']; best by oos_expectancy=+0.264R OOS. Lockbox checked once.",
+  "diff": [
+    {
+      "param": "regime.er_threshold",
+      "from": 0.32,
+      "to": 0.34
+    },
+    {
+      "param": "regime.atr_floor_pips",
+      "from": 5.0,
+      "to": 4.5
+    }
+  ],
+  "status": "proposed"
+}

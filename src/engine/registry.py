@@ -51,9 +51,11 @@ register(DEFAULT_STRATEGY, SessionBreakoutER)
 
 # ---- research-engine candidates (dev-registered, NOT promoted — spec 08 §5.1) ----
 from .strategy_asian_sweep import AsianSweepFade  # noqa: E402
+from .strategy_asian_sweep_rr import AsianSweepFadeRR  # noqa: E402
 from .strategy_compression import SessionBreakoutERCompression  # noqa: E402
 from .strategy_late_drift import LateSessionDrift  # noqa: E402
 
 register("SessionBreakoutERCompression", SessionBreakoutERCompression)
 register("AsianSweepFade", AsianSweepFade)
+register("AsianSweepFadeRR", AsianSweepFadeRR)
 register("LateSessionDrift", LateSessionDrift)

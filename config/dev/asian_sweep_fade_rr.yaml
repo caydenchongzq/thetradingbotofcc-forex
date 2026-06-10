@@ -1,0 +1,38 @@
+# DEV config — AsianSweepFadeRR (research-engine candidate 2026-06-10, spec 08).
+# Asymmetric-R:R variant of the rejected AsianSweepFade (2026-06-08): same sweep entry +
+# inverted-ER regime, but a TIGHT wick stop + single 2.0R target (the experiment its own
+# Lessons/Next-steps prescribed). Single pre-registered config; deliberately NOT swept. Run:
+#   py scripts/run_backtest.py --config-file config/dev/asian_sweep_fade_rr.yaml --walkforward --trials <cumulative>
+# Bypasses the ConfigStore HEAD; writes nothing to state/.
+strategy:
+  name: AsianSweepFadeRR
+  instrument: EURUSD
+  timeframe: M15
+  pip_size: 0.0001
+  timeframe_minutes: 15
+  fade:
+    asian_start: "00:00"      # London time
+    asian_end: "08:00"
+    window_start: "08:00"
+    window_end: "12:00"       # widened 11:00 -> 12:00 (a-priori) to clear the 200-trade floor
+    sweep_buffer_pips: 1.5    # = incumbent's default breakout buffer; not tuned
+    wick_buffer_pips: 0.5     # stop sits just BEYOND the sweep extreme
+    min_asian_bars: 16
+    one_shot_per_side: true
+  regime:                     # measured identically to the incumbent; ER gate INVERTED
+    er_window: 14
+    er_threshold: 0.30        # fade requires ER < threshold (a-priori complement)
+    atr_window: 14
+    atr_floor_pips: 4.0
+    atr_ceiling_pips: 22.0
+    atr_low_pct: 0.20
+    atr_high_pct: 0.90
+  exits:
+    atr_mult_sl: 1.0          # FLOOR only; the wick distance is the true stop (was 1.2)
+    target_r_multiples: [2.0] # single asymmetric target (R:R = 1:2), was symmetric [1.0]
+    partial_fractions: [1.0]
+    move_be_after_r: null     # no BE move — let the fade resolve to 2R or fail at the wick
+  blackout:
+    high_impact_currencies: [EUR, USD]
+    before_min: 15
+    after_min: 15

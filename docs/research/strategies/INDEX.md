@@ -17,6 +17,7 @@
 | [2026-06-08-asian-sweep-fade](2026-06-08-asian-sweep-fade.md) | AsianSweepFade | mean-reversion | tested-rejected | No edge: −0.158R in-sample, PF 0.65, 0/7 WF folds, lockbox FAIL; symmetric-1R sweep fade is structurally negative |
 | [2026-06-09-late-session-drift](2026-06-09-late-session-drift.md) | LateSessionDrift | trend | tested-rejected | Real but un-harvestable: +2.3 pip/night raw drift, but 1.24-pip entry spread (thin-hour) + stop-noise → −0.146R, 1/7 WF folds, lockbox −0.232R PF 0.40; needs-live-mirror flag (moot) |
 | [2026-06-10-asian-sweep-fade-rr](2026-06-10-asian-sweep-fade-rr.md) | AsianSweepFadeRR | mean-reversion | tested-rejected | Asymmetric R:R does NOT rescue the fade: tight wick stop + 2R drops win 54.7%→35.8% at constant PF ~0.68 (=no edge); −0.212R, 1/7 WF folds, lockbox −0.083R PF 0.84 FAIL. **Sweep-fade family now closed** (both 1R & 2R rejected) |
+| [2026-06-11-breakout-retest](2026-06-11-breakout-retest.md) | BreakoutRetestER | breakout | tested-rejected | Break→retest→resume filter is ANTI-selective: discards the immediate-continuation winners (win 73%→43%, PF 1.99→0.70) AND halves trades to 113 (<200 floor); −0.181R, 2/7 WF folds, lockbox −0.102R PF 0.75 FAIL. **Breakout entry-timing subsets are double-jeopardy** (trade-floor + anti-selection) |
 
 ## Idea queue (triaged, not yet tested)
 
@@ -27,6 +28,10 @@
 | [2026-06-07-cross-instrument-confirmation](2026-06-07-cross-instrument-confirmation.md) | CrossInstrumentConfirmation | filter | blocked-on-data | Needs multi-instrument export AND longer history (filter trade-count cap) |
 | 2026-06-10-twenty-day-turtle-soup | TwentyDayTurtleSoup | mean-reversion | idea | Fade a sweep of a ≥20-session structural high/low (the actual level in Costa SSRN's >75% stat), NOT the overnight range. Distinct *level* vs the closed Asian-fade family. Risk: rare → likely <200 trades; blocked on trade-count until longer history (queued 2026-06-10) |
 | 2026-06-10-sweep-magnitude-fade | SweepMagnitudeFade | mean-reversion | idea | Only fade deep sweeps (penetration > ~0.5×ATR beyond the level) — a different *entry* mechanism (the lever the closed fade family leaves open). Subtractive on an already-borderline trade count; estimate frequency before testing (queued 2026-06-10) |
+
+| 2026-06-11-trend-pullback-ema | TrendPullbackEMA | trend | idea | Enter a FRESH shallow pullback to a fast EMA in an ER-confirmed trend — a NEW signal source, NOT a subset of incumbent breakouts (sidesteps the breakout-subset double-jeopardy, [[2026-06-11-breakout-retest]]). Distinct from rejected trend probes (serial-corr [[2026-06-07-intraday-ts-momentum]], time-of-day [[2026-06-09-late-session-drift]]): a structural retracement. Queue 2026-06-11 |
+| 2026-06-11-vwap-stretch-reversion | VWAPStretchReversion | mean-reversion | idea | Fade a large session-VWAP stretch (no sweep) — different mechanism from the closed sweep-fade family. Risk: mean-reversion scrutiny + trade count; estimate frequency first. Queue 2026-06-11 |
+| 2026-06-11-second-entry-orb | SecondEntryORB | breakout | idea | ADDITIVE: keep incumbent close-entry AND add a re-break second entry after a first stop-out, to RAISE trade count (inverse of [[2026-06-11-breakout-retest]]). The only retest-adjacent idea worth testing because it is additive, not subtractive. Queue 2026-06-11 |
 
 > Retired idea stubs: [2026-06-07-asian-sweep-fade](2026-06-07-asian-sweep-fade.md) (tested 2026-06-08 → rejected).
 > Closed families: **Asian sweep-fade** — both symmetric-1R ([[2026-06-08-asian-sweep-fade]]) and asymmetric-2R ([[2026-06-10-asian-sweep-fade-rr]]) rejected; no further exit-geometry variants (needs a different entry mechanism).

@@ -82,3 +82,45 @@ def compression_pct(highs: Sequence[float], lows: Sequence[float],
     if not math.isfinite(mean_recent):
         return 1.0
     return percentile_rank(mean_recent, baseline)
+
+
+def breakout_retest_trigger(highs: Sequence[float], lows: Sequence[float],
+                            closes: Sequence[float], level: float,
+                            direction: str) -> bool:
+    """Break -> retest -> resume entry trigger for an opening-range breakout level.
+
+    Walks the time-ordered post-opening-range bars (last element = current bar) through a
+    three-state machine and returns ``True`` only when the CURRENT (last) bar completes a
+    valid break-and-retest entry that has not already fired earlier in the sequence:
+
+      LONG  : a bar CLOSES above ``level`` (break) -> a later bar's LOW returns to/through
+              ``level`` (retest of broken resistance-as-support) -> a bar CLOSES back above
+              ``level`` (resume). SHORT is the mirror (close below, high back to level, close
+              below).
+
+    One-shot: if the first valid entry occurs on an EARLIER bar, the function returns
+    ``False`` (that trade was already taken; never re-enter the same side this session). The
+    break bar itself can never be the retest/entry bar. A retest wick that closes back beyond
+    the level on the SAME bar is a valid immediate entry.
+
+    Pure function: no state, no clock, no I/O. Degenerate/empty input -> ``False`` (fail
+    safe: no trade)."""
+    n = len(closes)
+    if n == 0 or len(highs) != n or len(lows) != n:
+        return False
+    long_ = direction == "long"
+    state = 0  # 0 = wait-break, 1 = wait-retest, 2 = armed
+    for i in range(n):
+        is_last = i == n - 1
+        c, h, l = closes[i], highs[i], lows[i]
+        if state == 0:                                  # waiting for the break
+            if (c > level) if long_ else (c < level):
+                state = 1
+            continue                                    # break bar is never the entry bar
+        if state == 1:                                  # waiting for the retest of the level
+            if (l <= level) if long_ else (h >= level):
+                state = 2                               # may resume on this same bar below
+        if state == 2:                                  # armed: enter on a resume close
+            if (c > level) if long_ else (c < level):
+                return is_last                          # True only on the current bar (1-shot)
+    return False

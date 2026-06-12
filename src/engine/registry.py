@@ -55,9 +55,11 @@ from .strategy_asian_sweep_rr import AsianSweepFadeRR  # noqa: E402
 from .strategy_breakout_retest import BreakoutRetestER  # noqa: E402
 from .strategy_compression import SessionBreakoutERCompression  # noqa: E402
 from .strategy_late_drift import LateSessionDrift  # noqa: E402
+from .strategy_trend_pullback import TrendPullbackEMA  # noqa: E402
 
 register("SessionBreakoutERCompression", SessionBreakoutERCompression)
 register("AsianSweepFade", AsianSweepFade)
 register("AsianSweepFadeRR", AsianSweepFadeRR)
 register("BreakoutRetestER", BreakoutRetestER)
 register("LateSessionDrift", LateSessionDrift)
+register("TrendPullbackEMA", TrendPullbackEMA)

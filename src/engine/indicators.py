@@ -84,6 +84,28 @@ def compression_pct(highs: Sequence[float], lows: Sequence[float],
     return percentile_rank(mean_recent, baseline)
 
 
+def ema_series(values: Sequence[float], window: int) -> list[float]:
+    """Exponential moving average series (Wilder-independent, alpha = 2/(window+1)).
+
+    Seeded with the simple average of the FIRST ``window`` values, then smoothed forward.
+    The returned list is *right-aligned* to ``values``: ``out[-1]`` is the EMA at the last
+    bar, ``out[-1-k]`` the EMA at the bar ``k`` slots before it. Length is
+    ``len(values) - window + 1``.
+
+    FAIL-SAFE: insufficient history or a non-positive window returns ``[]`` (callers must
+    treat the empty result as "no signal"). Pure function: no state, no clock, no I/O.
+    """
+    if window <= 0 or len(values) < window:
+        return []
+    alpha = 2.0 / (window + 1.0)
+    seed = sum(values[:window]) / window
+    out = [seed]
+    for v in values[window:]:
+        seed = alpha * v + (1.0 - alpha) * seed
+        out.append(seed)
+    return [x if math.isfinite(x) else 0.0 for x in out]
+
+
 def breakout_retest_trigger(highs: Sequence[float], lows: Sequence[float],
                             closes: Sequence[float], level: float,
                             direction: str) -> bool:

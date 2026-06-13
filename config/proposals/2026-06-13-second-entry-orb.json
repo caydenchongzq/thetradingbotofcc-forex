@@ -1,0 +1,27 @@
+{
+  "proposal_id": "2026-06-13-second-entry-orb",
+  "parent_config_version": 4,
+  "author": "research_engine",
+  "created_utc": "2026-06-13T00:50:00Z",
+  "strategy_name": "SecondEntryORB",
+  "hypothesis": "Add one re-break ('second attempt') entry per side per day on top of the incumbent's unchanged first-break entry (cap 2 entries/side/day). Re-break = first break fails (price closes back inside the OR range) then the same level is broken again; the failed first attempt flushes stops and leaves a small continuation edge. Exit geometry is the incumbent's validated single-1R / 1.2xATR machinery (re-break is the same momentum mechanism).",
+  "diff": [
+    {"param": "name", "from": "SessionBreakoutER", "to": "SecondEntryORB"},
+    {"param": "second_entry.max_entries_per_side", "from": null, "to": 2}
+  ],
+  "backtest": {
+    "data": "state/parquet/eurusd_m15.parquet",
+    "trials": 164,
+    "in_sample": {"trades": 252, "expectancy_r": 0.266, "win_rate": 0.718, "profit_factor": 1.84, "sharpe": 3.10, "sortino": 4.70, "max_dd_usd": 2614, "net_usd": 23298, "dsr": 0.964, "ftmo_breaches": 0},
+    "walkforward": {"folds_profitable": "6/7", "weak_folds": 1, "min_fold_r": -0.081, "stitched_oos_r": 0.273, "collapse": false, "severe_fold": false},
+    "lockbox": {"window": "2025-11-01..2026-05-29", "trades": 66, "expectancy_r": 0.248, "profit_factor": 1.75, "sharpe": 3.14, "core_gates": "PASS"},
+    "verdict": "PASS (all R6 gates + walk-forward + lockbox)"
+  },
+  "ab_vs_incumbent_head_v4": {
+    "incumbent": {"trades": 224, "expectancy_r": 0.294, "profit_factor": 1.99, "sharpe": 3.36, "sortino": 5.36, "max_dd_usd": 1883, "dsr": 0.989, "wf_folds": "7/7", "lockbox_r": 0.324, "lockbox_pf": 2.15},
+    "delta_candidate_minus_incumbent": {"expectancy_r": -0.028, "profit_factor": -0.15, "sharpe": -0.26, "sortino": -0.66, "max_dd_usd": 731, "dsr": -0.025, "lockbox_r": -0.076, "lockbox_pf": -0.40}
+  },
+  "recommendation": "do-not-promote",
+  "recommendation_rationale": "Clears every gate + walk-forward + lockbox in isolation (a first for the research engine), but is DOMINATED by the incumbent HEAD v4 on every risk-adjusted axis and downgrades the clean 7/7 walk-forward to 6/7. The 28 added re-break trades are only ~+0.04R each (positive, but ~7x below the incumbent's +0.294R/trade), so they dilute a higher-quality book and raise drawdown. A pass is necessary but not sufficient: a candidate must also BEAT the incumbent (CLAUDE.md playbook step 4; cf. the 2026-06-08 sweep-winner precedent). Promotion is human-only via ConfigStore.promote (this is a strategy-name swap, not an ALLOWED_LEVER diff, so the auto-validator cannot apply it).",
+  "status": "proposed"
+}

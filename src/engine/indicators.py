@@ -106,6 +106,43 @@ def ema_series(values: Sequence[float], window: int) -> list[float]:
     return [x if math.isfinite(x) else 0.0 for x in out]
 
 
+def second_entry_breakout_trigger(closes: Sequence[float], level: float,
+                                  direction: str, max_entries: int) -> bool:
+    """Re-break ("second attempt") opening-range breakout trigger — purely close-based.
+
+    An *episode* is a maximal run of consecutive bars CLOSING beyond ``level`` (above for
+    long, below for short); it *starts* on the first such bar (one preceded by a bar NOT
+    beyond, or the very first bar). The incumbent fires on episode 1 only (one-shot per
+    side). This trigger returns ``True`` when the CURRENT (last) bar *starts* a new episode
+    whose ordinal index is within ``max_entries`` — i.e. it ADDS a re-break entry after price
+    has closed back inside the range between episodes, without ever removing the incumbent's
+    first-break entry (``max_entries = 1`` reproduces the incumbent exactly).
+
+    Strictly additive to trade count: a later episode can only fire if an earlier one already
+    did and then price closed back inside (the first attempt "failed"). Fires at most once per
+    episode (on its first beyond-close), matching the incumbent's close-entry semantics.
+
+    Pure function: no state, no clock, no I/O. Degenerate/empty input or ``max_entries < 1``
+    -> ``False`` (fail safe: no trade)."""
+    n = len(closes)
+    if n == 0 or max_entries < 1:
+        return False
+    long_ = direction == "long"
+
+    def beyond(c: float) -> bool:
+        return c > level if long_ else c < level
+
+    if not beyond(closes[-1]):
+        return False                              # current bar is not a break
+    if n >= 2 and beyond(closes[-2]):
+        return False                              # mid-run continuation, not an episode start
+    episodes = 0                                  # count episode starts up to & incl. current
+    for i in range(n):
+        if beyond(closes[i]) and (i == 0 or not beyond(closes[i - 1])):
+            episodes += 1
+    return episodes <= max_entries
+
+
 def breakout_retest_trigger(highs: Sequence[float], lows: Sequence[float],
                             closes: Sequence[float], level: float,
                             direction: str) -> bool:

@@ -183,3 +183,29 @@ def breakout_retest_trigger(highs: Sequence[float], lows: Sequence[float],
             if (c > level) if long_ else (c < level):
                 return is_last                          # True only on the current bar (1-shot)
     return False
+
+
+def ema_slope_sign(values: Sequence[float], window: int, lookback: int) -> int:
+    """Sign of the EMA(``window``) slope, measured over the last ``lookback`` bars.
+
+    Returns +1 if the EMA is higher now than ``lookback`` bars ago (up-trend), -1 if lower
+    (down-trend), and 0 if flat OR there is not enough history to form the comparison. Used as
+    a *higher-timeframe trend* proxy on the M15 series: a slow EMA's slope over a multi-hour
+    lookback summarises the prevailing drift, independent of the intraday opening-range level.
+
+    Pure function: no state, no clock, no I/O. FAIL-SAFE: a non-positive ``lookback``/``window``
+    or insufficient history -> 0 (callers treat 0 as "trend unconfirmed" -> no trade).
+    """
+    if window <= 0 or lookback < 1:
+        return 0
+    ema = ema_series(values, window)
+    if len(ema) <= lookback:
+        return 0
+    slope = ema[-1] - ema[-1 - lookback]
+    if not math.isfinite(slope):
+        return 0
+    if slope > 0:
+        return 1
+    if slope < 0:
+        return -1
+    return 0

@@ -2,16 +2,15 @@
 id: 2026-06-15-london-open-breakout-er
 name: LondonOpenBreakoutER
 family: breakout
-status: idea                     # researched + triaged; NOT yet built/tested (run blocked — see below)
-related: [2026-06-02-session-breakout-er, 2026-06-14-trend-aligned-orb, 2026-06-13-second-entry-orb, 2026-06-07-pre-session-compression-filter]
+status: tested-rejected
+related: [2026-06-02-session-breakout-er, 2026-06-15-resting-stop-and-market-entry, 2026-06-14-trend-aligned-orb, 2026-06-13-second-entry-orb]
 sources:
   - "https://www.quantifiedstrategies.com/london-breakout-strategy/"
   - "https://www.forex.com/en-uk/trading-academy/courses/advanced-strategies/uk-open-range-breakout/"
   - "https://www.litefinance.org/blog/for-beginners/trading-strategies/opening-range-breakout-strategy/"
   - "https://titanfx.com/education/london-forex-trading-session-trading-strategies"
-  - "https://www.forexfactory.com/thread/296776-eurusd-session-breakout-and-reverse-strategy"
-trials_used: 0
-verdict: "Idea — strongest build candidate in the queue. Applies the validated overlap-ORB mechanism to the INDEPENDENT London-open session, escaping the 200-trade-floor trap that killed the subtractive-filter family. NOT built this run: working tree dirty with the uncommitted resting-stop refactor — build once HEAD is clean."
+trials_used: 1
+verdict: "Session-transfer FALSIFIED. The ORB+ER/ATR mechanism, filled LIVE-FAITHFULLY (the RESTING_STOP_FIX market entry it inherits), has NO edge at the London open either: in-sample −0.129R / PF 0.57 / 55.6% win (WORSE than the overlap incumbent's live-faithful −0.080R), 0/5 scored WF folds profitable, stitched −0.220R, severe folds; only the 34-trade lockbox is positive (+0.188R) — the same misleading tail as TrendAlignedORB. AND it misses the 200-trade floor on its own base (153). Two independent failures: no live-fillable edge + below floor. Confirms [[2026-06-15-resting-stop-and-market-entry]]: the breakout family's apparent edge was the level-fill artifact, not the session — moving it to a fresh session recovers nothing."
 ---
 
 # LondonOpenBreakoutER — the validated ORB+ER+ATR mechanism on the London-open session
@@ -25,145 +24,127 @@ session opens against a compressed overnight (Asian) range, so the first directi
 is an *initiation* move rather than a mid-trend continuation.
 
 Falsifiable claim: **the same opening-range-breakout edge the incumbent harvests at the overlap
-also exists at the London open**, and because the London-open window is a *different time of day*
-it produces an **independent trade stream** — not a subset of the incumbent's ~224 trades. If
-true, a London-open ORB clears the R6 gates on its own base; if the open is pure noise (efficient
-re-pricing of the Asian range), the ER/ATR regime gate should reject most of it and the candidate
-fails honestly on edge, not on trade count.
-
-Who is on the other side: overnight mean-reversion desks and Asian-range faders whose stops sit
-just beyond the pre-London range; the institutional order flow that arrives at 08:00 runs them.
+also exists at the London open**, on an **independent** trade stream (a different time of day,
+not a subset of the incumbent's ~224 trades). If true, a gated London-open ORB clears the R6
+gates on its own base; if the open is efficient re-pricing of the Asian range, the ER/ATR gate
+rejects most of it and the candidate fails honestly on edge.
 
 ## Sources
-- QuantifiedStrategies — *London Breakout Strategy: Rules and Backtest Performance*
-  (https://www.quantifiedstrategies.com/london-breakout-strategy/). **Key caveat, not a green
-  light:** a *naive* "buy above / sell below the Asian range" on EUR/USD "often result[s] in
-  losses." This is the differentiator, not a refutation — see Relation to prior work.
-- FOREX.com — *The Opening Range Breakout Strategy (European/UK open)*: define the range in the
-  half-hour before the 08:00 London open; EUR/USD is the canonical pair
+- QuantifiedStrategies — *London Breakout Strategy*: a *naive* "buy above / sell below the Asian
+  range" on EUR/USD "often result[s] in losses" — the ER/ATR gate was meant to be the
+  differentiator (https://www.quantifiedstrategies.com/london-breakout-strategy/).
+- FOREX.com — *European/UK Open Range Breakout*; EUR/USD is the canonical pair
   (https://www.forex.com/en-uk/trading-academy/courses/advanced-strategies/uk-open-range-breakout/).
 - LiteFinance — *ORB success rate 40–60%, filter-dependent*
-  (https://www.litefinance.org/blog/for-beginners/trading-strategies/opening-range-breakout-strategy/).
-- TitanFX — London session is the highest-volume session (~35% of turnover)
+  (https://www.litefinance.org/blog/.../opening-range-breakout-strategy/).
+- TitanFX — London session ≈ highest-volume session, ~35% of turnover
   (https://titanfx.com/education/london-forex-trading-session-trading-strategies).
-- Forex Factory — *EURUSD Session Breakout and Reverse* community thread (mechanism only, no
-  performance claim) (https://www.forexfactory.com/thread/296776-eurusd-session-breakout-and-reverse-strategy).
 
-All hypothesis-only. No community code copied; the implementation re-uses our own audited
-`SessionBreakoutER` machinery (below). The backtester is the arbiter.
+Hypothesis-only; no community code copied. The implementation re-uses our own audited
+`SessionBreakoutER` machinery. The backtester is the arbiter.
 
 ## Relation to prior library work
-- **Builds on [[2026-06-02-session-breakout-er]] (promoted incumbent):** identical mechanism —
-  opening-range break, ER≥threshold + ATR-normal regime gate, `max(structural, 1.2×ATR)` stop,
-  single-1R target, break-even `manage()`. The *only* change is the session window
-  (`session.window_start/window_end`). This is deliberate: it isolates one variable (does the
-  edge transfer to a new session?) and inherits a fully validated exit/management seam.
-- **Escapes the failure mode that killed the filter family
-  ([[2026-06-14-trend-aligned-orb]], [[2026-06-07-pre-session-compression-filter]]):** every
-  subtractive filter to date dies on the **200-trade hard floor** because the incumbent's base is
-  only ~224 (just 24 above the floor). TrendAlignedORB *dominated* HEAD on every quality axis yet
-  was rejected for cutting to 149 trades. LondonOpenBreakoutER is **not subtractive** — it does
-  not touch the incumbent's trades; it generates its **own** base from a different time of day, so
-  it is bounded by its own trade count, not by the incumbent's 24-trade headroom.
-- **Differs from [[2026-06-13-second-entry-orb]] (additive-but-dominated):** SecondEntryORB added
-  *same-session* re-break entries that diluted the incumbent's expectancy (~+0.04R each). This
-  candidate adds a *different-session* stream; it is intended to **stand alone**, judged on its own
-  gates, not appended to the incumbent's trades.
-- **Re the QuantifiedStrategies "naive London breakout loses" caveat:** the recorded loss is for an
-  *un-gated* Asian-range break. Our mechanism only fires inside an ER≥thr + ATR-normal regime —
-  precisely the filter the literature says naive London breakouts lack. The candidate is therefore
-  a *gated* London ORB, not the naive one shown to lose; if the gate cannot rescue it, the arbiter
-  records that cleanly.
-
-Not a variant of any closed family (sweep-fade, trend-continuation). Dedup: no existing library
-entry tests a non-overlap session.
+- **Builds on [[2026-06-02-session-breakout-er]]:** identical mechanism (ORB break, ER≥thr +
+  ATR-normal gate, `max(structural, 1.2×ATR)` stop, single-1R target, break-even `manage()`);
+  the ONLY change is the session window. Critically, it inherits the *post-fix*
+  `evaluate` — the RESTING_STOP_FIX **market** entry (fill ≈ the confirmed close) — so unlike
+  the pre-fix family it is tested **live-faithfully from day one** (no level-fill artifact
+  possible). This is what makes the result trustworthy where the old +0.391R was not.
+- **Intended to escape the 200-trade-floor trap** that killed the subtractive-filter family
+  ([[2026-06-14-trend-aligned-orb]]): it is additive (a new session), not subtractive. *In the
+  event the escape failed anyway* — the London-open base is only **153 trades**, itself below
+  the floor (see Verdict). A fresh base is only useful if the session actually produces ≥200
+  gated trades; this one does not.
+- **Differs from [[2026-06-13-second-entry-orb]]:** that added *same-session* re-break entries
+  (dilution); this is a stand-alone *different-session* base.
 
 ## Strategy spec
-- **Session:** London open. Window `08:00–11:00` Europe/London (a 3-hour span mirroring the
-  incumbent's 3-hour overlap window, to give a comparable trade count), opening-range
-  `opening_range_minutes: 30` (range = 08:00–08:30), one-shot per side.
-- **Entry:** first bar that breaks `range_high + buffer` (long) / `range_low − buffer` (short),
-  using the incumbent's exact entry logic (whichever entry model is HEAD at build time — inherit,
-  do not fork).
-- **Regime gate:** unchanged — `efficiency_ratio ≥ er_threshold` and ATR in the normal band. The
-  ER is computed on the bars leading into 08:00 (i.e. the Asian session), which is the correct
-  read of "is the overnight range coiled or already trending."
-- **News gate:** unchanged EUR/USD high-impact blackout. Note: 08:00–11:00 London catches several
-  EUR data releases (German/EZ prints at ~07:00–10:00 London) — the blackout matters more here than
-  at the overlap; verify it engages.
+- **Session:** London open, window `08:00–11:00` Europe/London (3-hour span mirroring the
+  incumbent's 3-hour overlap), opening range `08:00–08:30`, one-shot per side.
+- **Entry:** inherited `SessionBreakoutER.evaluate` verbatim — close-confirmed break, **market**
+  fill at the confirmed close (live-faithful). The ER is read on the bars into 08:00 (the Asian
+  session) — the correct "is the overnight range coiled or already trending" read.
+- **Exit geometry (spec 08 §5.8 — pre-registered):** stop `max(structural, 1.2×ATR)` and single
+  **1R** (R:R 1:1), inherited by mechanism-equivalence (same momentum break ⇒ same geometry; the
+  ≥2R rejections [[2026-06-07-tp-2r-sweep]] bind any 2R variant). No new manage semantics ⇒ no
+  live-mirror session required.
 
-**Exit geometry (spec 08 §5.8 — pre-registered):**
-- **Stop:** `max(structural_range_stop, 1.2×ATR)` — *inherited deliberately*, with rationale: the
-  entry is the same range-break momentum structure as the incumbent, so the stop that the
-  *structure* implies (opposite end of the opening range, floored at 1.2×ATR so a tight range does
-  not noise-out the trade) is the geometry this mechanism implies, not an unexamined default.
-- **Target:** single **1R** (R:R = 1:1). Why 1R fits here and a ≥2R variant is **pre-closed**: the
-  exhaustive incumbent exit record — the ≥2R sweep ([[2026-06-07-tp-2r-sweep]], all 18 failed DSR +
-  lockbox) and the scaled-runner full exit model ([[2026-06-03-full-exit-model]], rejected) —
-  establishes that this exact breakout mechanism on EUR/USD M15 rewards a high-win-rate ~1R
-  structure and punishes high-R targets. Since the London-open entry is the *same mechanism*, that
-  finding transfers a priori; a 2R London-open variant would share the recorded failure mode and is
-  forbidden under §4.3 unless it brings a new differentiator. **1R is justified by
-  mechanism-equivalence, not inherited by reflex.**
-- This reuses the incumbent's validated `manage()` (break-even after 1R) byte-for-byte ⇒ **no new
-  manage semantics, no live-mirror session required**; only the session config differs.
+## Implementation notes (built this run — dev-isolated)
+- `src/engine/strategy_london_open.py`: thin `class LondonOpenBreakoutER(SessionBreakoutER)`
+  that forces the London-open window in `__init__` (tunable via a dedicated `london_open` config
+  block) and inherits `evaluate`/`manage` verbatim. One `register("LondonOpenBreakoutER", …)`
+  line in `src/engine/registry.py` (additive).
+- Unit tests `tests/engine/test_london_open.py` (8): forces the window; fires at the London open;
+  silent in the overlap; disjoint base from the incumbent; inherits the market fill (entry_price
+  == close, not the level); exit geometry; degraded paths; registry build. Full
+  `pytest tests/engine tests/backtest` green.
+- No writes to `state/config` HEAD; no live-path edits; no promotion.
 
-**Params to expose as `ALLOWED_LEVERS` if ever promoted:** `session.window_start`,
-`session.window_end`, `session.opening_range_minutes` (the rest are already levers on the
-incumbent).
+## Backtest results (real data, 59,993 M15 bars, 2024-01 → 2026-05; `--trials 166`)
 
-## Implementation notes (planned — NOT executed this run)
-- Additive only: a thin `class LondonOpenBreakoutER(SessionBreakoutER)` in a new module
-  `src/engine/strategy_london_open.py` that sets London-open session defaults and inherits
-  `evaluate`/`manage` verbatim (no mechanism fork — this guarantees the A/B isolates the session
-  variable and that whatever entry model is HEAD is the one tested). One `register(...)` line.
-  Unit tests under `tests/engine` (arms in 08:00–11:00, silent in 13:00–16:00; regime/blackout
-  paths) and a `tests/backtest` smoke test.
-- No writes to `state/`; no live-path edits; never `ConfigStore.promote`.
-
-## Backtest results
-**Not run.** Validation command for the next run (sandbox-chunked if needed):
-`py scripts/run_backtest.py --strategy LondonOpenBreakoutER --walkforward --trials <cumulative+1>`
-(cumulative is **165** after [[2026-06-14-trend-aligned-orb]] ⇒ use `--trials 166`), plus an A/B
-vs HEAD via the `scripts/compare_exits.py` pattern. Judge on the R6 gates + walk-forward +
-lockbox, never raw expectancy.
-
-| metric | gate | candidate | incumbent HEAD |
+### In-sample (all gates)
+| metric | gate | LondonOpenBreakoutER | incumbent HEAD (live-faithful) |
 |---|---|---|---|
-| (pending — build blocked this run) | | | |
+| trades | ≥ 200 | **153 — FAIL** | 224 |
+| expectancy | ≥ 0.10R | **−0.129R — FAIL** | −0.080R |
+| win rate | — | 55.6% | 57.6% |
+| profit factor | ≥ 1.3 | **0.57 — FAIL** | 0.56 |
+| sharpe | ≥ 1.0 | **−1.83 — FAIL** | −2.00 |
+| sortino | ≥ 1.5 | **−2.04 — FAIL** | −2.21 |
+| DSR | ≥ 0.95 | **0.00 — FAIL** | 0.00 |
+| FTMO breaches | 0 | 0 — PASS | 0 |
+| **verdict** | | **FAIL (6/7 gates)** | FAIL |
+
+### Walk-forward (OOS)
+| window | trades | exp(R) | PF | net$ |
+|---|---|---|---|---|
+| 2024 Q1 | 15 | −0.210 | 0.55 | −1103 |
+| 2024 Q2 | 9 | −0.404 | 0.33 | −1320 |
+| 2024 Q3 | 8 | −0.163 | 0.59 | −525 |
+| 2024 Q4 | 15 | −0.121 | 0.68 | −803 |
+| 2025 Q1 | 19 | −0.314 | 0.42 | −2317 |
+| 2025 Q2 | 22 | −0.265 | 0.42 | −1705 |
+| 2025 Q3–Q4 | 31 | −0.142 | 0.59 | −940 |
+
+**0/5 scored folds profitable**, stitched OOS −0.220R vs in-sample −0.129R, **severe fold**
+(min −0.314R). Lockbox 2025-11→2026-05: 34 trades, **+0.188R, PF 1.38 — PASS** (its core gates),
+but a 34-trade tail that contradicts all seven prior quarters. **WALK-FORWARD: FAIL.**
+
+## A/B vs incumbent HEAD
+On the same live-faithful fill, LondonOpenBreakoutER is **worse than the overlap incumbent on
+both axes**: −0.129R vs −0.080R expectancy, and 153 vs 224 trades. There is no dimension on
+which the London-open session improves the mechanism. (Both are losers; the comparison only
+confirms the session transfer did not help.)
 
 ## Verdict
-**Idea / not tested this run.** Build was deliberately **not** started because the working tree is
-mid-refactor: the rejected resting-stop conversion (`docs/RESTING_STOP_FIX.md`,
-`tests/engine/test_resting_stop.py`, and ~1,900 lines of uncommitted diff across
-`src/engine/strategy.py`, `decide.py`, `run.py`, `src/backtest/engine.py`, execution/journal
-types, and ~12 test files) is sitting uncommitted on top of HEAD v4. Backtesting now would (a) run
-my candidate's inherited `evaluate` against the **resting-stop** base, not the validated close-based
-HEAD, and (b) make any "A/B vs HEAD" compare against a strategy the library has already recorded as
-do-not-deploy (win 73%→44%, −0.267R). Per spec 08 §5.5 (fail safe on ambiguous tooling state), this
-run does research + triage only and leaves the code tree untouched.
+**tested-rejected — two independent failures.** (1) No live-fillable edge: the mechanism is
+structurally negative at the London open (−0.129R, PF 0.57, 0/5 WF folds), slightly *worse* than
+the already-edgeless overlap. (2) Below the 200-trade floor on its own base (153). The lockbox
+being the lone green window is the same artifact pattern flagged on [[2026-06-14-trend-aligned-orb]]
+— not an edge.
 
 ## Lessons
-- **The trade-floor wall has a structural escape: a new session, not a new filter.** Every quality
-  improvement attempted so far was *subtractive* on the incumbent's 224-trade base and died at the
-  200 floor. The way to buy more quality headroom is to *add an independent trade base* (a second
-  session), not to keep slicing the existing one. This reframes the library's recurring killer as an
-  argument *for* multi-session research, distinct from the additive-same-session dilution that sank
-  SecondEntryORB.
-- **Process lesson (this run):** an autonomous research run must check `git status` before
-  backtesting. A dirty working tree that has modified the incumbent base class silently invalidates
-  every `--strategy <candidate>` A/B (subclasses inherit the contaminated base). Added to the
-  orientation checklist conceptually for future runs.
+- **The edge was the fill, not the session.** [[2026-06-15-resting-stop-and-market-entry]] showed
+  the incumbent's apparent edge was the unfillable level-fill. This run is the corollary: transfer
+  the *same mechanism* to a fresh session under a live-faithful fill and there is still no edge.
+  The ORB+ER/ATR breakout on EURUSD M15 does not have a live-realizable edge in EITHER session.
+- **"A new independent base escapes the floor" is necessary but not sufficient.** The reasoning was
+  structurally right (additive, not subtractive) but presupposed the new session produces ≥200
+  gated trades AND carries an edge. The London open delivered neither (153 trades, negative). A
+  fresh base of a no-edge mechanism is still no-edge.
+- **The lockbox-positive / everything-else-negative pattern has now recurred twice** (TrendAlignedORB,
+  here). A single favorable 30–40 trade tail window is noise, not signal — it reinforces judging on
+  the full gate + WF stack, never the lockbox in isolation.
+- **Research-program implication:** the ORB-breakout family is now 0-for-everything under
+  live-faithful fills (overlap incumbent, second-entry, trend-filtered, London-open). Future
+  candidates should pivot to a *genuinely different mechanism*, or to an entry whose edge
+  demonstrably survives a market/stop fill — not another ORB-mechanism variant.
 
 ## Next steps
-1. **Unblock:** Cayden resolves the working-tree resting-stop state (commit the pivot, revert it, or
-   stash to a branch) so HEAD v4 is the clean base again.
-2. Build LondonOpenBreakoutER per the spec above (thin subclass, additive), pytest green.
-3. Validate `--walkforward --trials 166` + A/B vs HEAD. **Key risk to watch:** whether the
-   London-open window clears the **200-trade floor on its own** (a 3-hour window with the ER/ATR gate
-   may pass fewer trades than the overlap if the open is choppier) — estimate the gated trade count
-   first; if < 200, this becomes `blocked-on-data` (needs longer history) like
-   [[2026-06-14-trend-aligned-orb]], not a re-test.
-4. If London-open stands alone, a later candidate could *combine* both sessions into one strategy to
-   roughly double the base — directly buying the headroom that would let TrendAlignedORB's
-   quality-veto pass the floor.
+1. **Reject**; do not pursue further ORB-session variants (NY-open would be inside the overlap;
+   Asian-open is low-vol). The session axis is exhausted for this mechanism.
+2. Pivot research toward mechanisms whose edge does not depend on the breakout-bar continuation
+   fill (the thing the level-fill was faking). Mean-reversion families are mostly closed; the open
+   space is a *different* entry whose live fill ≈ its signal price.
+3. INDEX: flip the London-open queue line from `idea` to `tested-rejected` (pending Cayden's
+   in-progress INDEX reformat — see this run's summary).

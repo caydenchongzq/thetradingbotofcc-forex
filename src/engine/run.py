@@ -7,6 +7,14 @@ Wires the deterministic spine together for live trading:
   ping the heartbeat. Any stale/degraded state resolves to hold/flatten — never a guess.
 
 The bar-driven decision is the same code the backtester drives, so live == backtest.
+
+ENTRY shapes (live == backtest, RESTING_STOP_FIX §3):
+  * 'enter'  — a single market/stop OrderIntent (non-arming strategies).
+  * 'arm'    — a resting-stop OCO pair (SessionBreakoutER): place BOTH pending stops at
+               OR-end; when one fills (a position appears) cancel the sibling; expire any
+               unfilled pendings at the session window-end. open_risk accrues on the FILL
+               (read from the live position), never on placement — a resting pending that
+               never fills adds zero open risk (the 2026-06 retcode-10015 phantom-risk fix).
 """
 
 from __future__ import annotations
@@ -21,6 +29,7 @@ from src.common.config import AppConfig, load_config
 from src.common.timeutil import ensure_utc, ftmo_day_start, is_new_ftmo_day, utc_iso
 from src.engine import build_strategy
 from src.engine.decide import decide_entry, decide_manage
+from src.execution.types import IntentStatus
 from src.ops import (Severity, append_alert_file, backoff_delay, engage_killswitch,
                      format_alert, killswitch_engaged, ping_healthcheck,
                      resolve_strategy_config, send_discord, send_telegram)
@@ -199,34 +208,79 @@ class LiveEngine:
         log.info("new bar %s | equity=%.2f day_pct_used=%.1f%% killswitch=%s",
                  last_ts.isoformat(), account.equity, 100 * env.daily_pct_used, ks.value)
 
-        # Risk-driven FLATTEN: close everything, latch the sentinel, stop (human clears).
+        # Risk-driven FLATTEN: close everything + cancel resting pendings, latch, stop.
         if ks is KillSwitchState.FLATTEN:
             self._flatten_and_halt("governor FLATTEN — daily-loss danger or stale data")
             engage_killswitch(self.cfg.state_dir, "governor_flatten")
             return
 
         open_positions = self._exec.open_positions()      # filtered by our magic
+        pendings = self._exec.pending_orders()            # our resting OCO legs
         if open_positions:
+            # One position at a time: the moment a resting leg fills, cancel the sibling(s)
+            # so the OCO can never become two positions.
+            for o in pendings:
+                self._exec.cancel(o.ticket)
+                day = replace(day, requests_used_today=day.requests_used_today + 1)
+            # open_risk now reflects the ACTUAL live position (accrued on fill, not on arm).
+            day = replace(day, open_risk_usd=self._live_open_risk(open_positions))
+            self._exec.journal.put_day_state(day)
             self._manage(open_positions[0], bars, now, account, day)
             return
+
+        # Flat. Unfilled resting orders carry their OWN expiry (expire_utc, set generically
+        # from the signal) so the BROKER auto-expires them — the executor never reaches into
+        # the strategy's session window. The OCO sibling is cancelled above on a fill.
 
         client_id = f"{self.cfg.execution.symbol}-{last_ts.strftime('%Y%m%dT%H%M')}"
         d = decide_entry(self._strategy, self.governor, bars, account, day,
                          self._exec.symbol_meta(), now, ContextBias.NORMAL, None,
                          client_id=client_id, magic=self.cfg.execution.magic,
-                         pending_orders_count=len(self._exec.pending_orders()))
+                         pending_orders_count=len(pendings))
         log.info("decision: %s (%s)", d.action, d.reason)
-        if d.action == "enter" and d.intent is not None:
+
+        if d.action == "arm" and d.intents and not pendings:
+            # Place BOTH resting stop legs (OCO). A broker REQUEST is consumed per leg; risk
+            # accrues only when a leg FILLS into a position (handled above), never on placing
+            # a resting order — a pending that never fills must add zero open_risk_usd.
+            placed = 0
+            for intent in d.intents:
+                res = self._exec.place(intent)
+                self._journal_arm_leg(d, intent, res)
+                placed += 1
+                if res.status is IntentStatus.REJECTED:
+                    self._alert(Severity.WARN, "arm leg rejected",
+                                f"{intent.side}_stop {intent.volume_lots} @ {intent.price} "
+                                f"retcode={res.retcode} ({res.error})")
+            day = replace(day, requests_used_today=day.requests_used_today + placed)
+            self._exec.journal.put_day_state(day)
+            self._alert(Severity.INFO, "armed OCO",
+                        f"{placed} resting leg(s) group={d.oco_group} expire={d.arm.expire_utc}")
+        elif d.action == "enter" and d.intent is not None:
             res = self._exec.place(d.intent)
             self._journal_entry(d, res)
-            # Persist day-state counters so the Governor sees today's activity next bar.
-            day = replace(day, requests_used_today=day.requests_used_today + 1,
-                          trades_opened_today=day.trades_opened_today + 1,
-                          open_risk_usd=day.open_risk_usd + d.risk_decision.risk_usd)
+            # A broker REQUEST is consumed whether or not the order fills, but a trade is
+            # only "opened" — and its risk only counts toward today's open exposure — on a
+            # confirmed FILL. Counting risk on a rejected order leaves a phantom
+            # open_risk_usd that the Risk Governor reads as live exposure and uses to
+            # under-size / gate later entries (the 2026-06 retcode-10015 incident, where
+            # two rejected intents accumulated $698.76 of non-existent open risk).
+            filled = res.status is IntentStatus.FILLED
+            day = replace(
+                day,
+                requests_used_today=day.requests_used_today + 1,
+                trades_opened_today=day.trades_opened_today + (1 if filled else 0),
+                open_risk_usd=day.open_risk_usd + (d.risk_decision.risk_usd if filled else 0.0),
+            )
             self._exec.journal.put_day_state(day)
-            self._alert(Severity.INFO, "entry placed",
-                        f"{d.intent.side} {d.intent.volume_lots} @ {d.intent.price} "
-                        f"(risk ${d.risk_decision.risk_usd:.0f})")
+            if filled:
+                self._alert(Severity.INFO, "entry placed",
+                            f"{d.intent.side} {d.intent.volume_lots} @ {d.intent.price} "
+                            f"(risk ${d.risk_decision.risk_usd:.0f})")
+            else:
+                self._alert(Severity.WARN, "entry rejected",
+                            f"{d.intent.side} {d.intent.volume_lots} @ {d.intent.price} "
+                            f"retcode={res.retcode} ({res.error})")
         elif d.action == "vetoed":
             self._exec.journal.append({
                 "record_type": "reject", "schema_version": 3,
@@ -234,6 +288,18 @@ class LiveEngine:
                 "instrument": self.cfg.execution.symbol, "stage": "risk",
                 "reason": d.reason,
                 "risk_checks": d.risk_decision.checks if d.risk_decision else None})
+
+    def _live_open_risk(self, positions) -> float:
+        """Open risk in USD implied by the ACTUAL live position(s): |entry - sl| * size.
+        Risk accrues here (on fill), so a resting pending contributes nothing until it fills."""
+        sm = self._exec.symbol_meta()
+        pip = sm.pip_size or 0.0001
+        total = 0.0
+        for p in positions:
+            if not p.sl:
+                continue
+            total += abs(p.price_open - p.sl) / pip * sm.pip_value_per_lot_usd * p.volume
+        return total
 
     def _manage(self, pos, bars, now, account, day) -> None:
         class _View:
@@ -288,6 +354,26 @@ class LiveEngine:
                       "entry_slippage_pips": exec_result.slippage_pips},
         })
 
+    def _journal_arm_leg(self, decision, intent, exec_result) -> None:
+        """Journal one resting OCO leg placement. The regime is shared (read at OR-end);
+        the per-leg direction/level come from the intent. A FILL is journalled later as a
+        normal position via reconciliation / management."""
+        arm = decision.arm
+        self._exec.journal.append({
+            "record_type": "arm_leg", "trade_id": intent.client_id,
+            "schema_version": 3, "config_version": self._active_version,
+            "ts_utc": utc_iso(arm.ts_decision_utc) if arm else utc_iso(intent.expire_utc),
+            "instrument": self.cfg.execution.symbol, "oco_group": decision.oco_group,
+            "leg": {"side": intent.side, "order_kind": intent.order_kind,
+                    "price": intent.price, "sl": intent.sl_price,
+                    "tp": intent.tp_prices[0] if intent.tp_prices else None,
+                    "volume_lots": intent.volume_lots,
+                    "expire_utc": utc_iso(intent.expire_utc) if intent.expire_utc else None},
+            "regime": ({"er": arm.regime.er, "atr_pips": arm.regime.atr_pips,
+                        "vol_state": arm.regime.vol_state.value} if arm else None),
+            "place_status": exec_result.status.value, "retcode": exec_result.retcode,
+        })
+
     # ---- one-shot / diagnostic modes (forward-test helpers) ----
     def run_once(self) -> int:
         """Connect, reconcile, run exactly ONE tick, then exit. For on-demand checks."""
@@ -323,8 +409,13 @@ class LiveEngine:
                      "-> gate_passed=%s", r.er, r.er_threshold, r.atr_pips,
                      r.atr_percentile, r.vol_state.value, r.regime_gate_passed)
             res = self._strategy.evaluate(bars, now, ContextBias.NORMAL, None)
+            from src.engine.types import ArmSignal as _Arm
             from src.engine.types import Signal as _Sig
-            if isinstance(res, _Sig):
+            if isinstance(res, _Arm):
+                lvl = lambda s: None if s is None else round(s.entry_price, 5)
+                log.info("evaluate -> ARM long@%s short@%s expire=%s",
+                         lvl(res.long), lvl(res.short), res.expire_utc)
+            elif isinstance(res, _Sig):
                 log.info("evaluate -> SIGNAL %s breakout@%s SL=%s",
                          res.direction.value, res.breakout_level,
                          res.exit_plan.initial_sl_price)
@@ -334,6 +425,8 @@ class LiveEngine:
         return 0
 
     def _flatten_and_halt(self, reason: str) -> None:
+        for o in self._exec.pending_orders():    # cancel resting OCO legs first
+            self._exec.cancel(o.ticket)
         for pos in self._exec.open_positions():
             self._exec.close(pos.ticket)
         self._alert(Severity.CRITICAL, "FLATTEN + halt", reason)

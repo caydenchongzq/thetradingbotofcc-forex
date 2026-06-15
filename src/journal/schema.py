@@ -14,7 +14,7 @@ from typing import Any
 
 SCHEMA_VERSION = 3
 
-RECORD_TYPES = frozenset({"trade", "reject", "health", "day_state", "intent"})
+RECORD_TYPES = frozenset({"trade", "reject", "health", "day_state", "intent", "arm_leg"})
 
 # Envelope fields every record must carry (spec 04 §3).
 _ENVELOPE_REQUIRED = ("record_type", "schema_version", "ts_utc")

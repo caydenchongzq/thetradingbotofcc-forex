@@ -33,6 +33,7 @@ class SpyJournal(Journal):
 class FakeBroker:
     def __init__(self, *, fill_on_send=True, magic=MAGIC):
         self.events: list = []
+        self.sent_orders: list = []
         self.fill_on_send = fill_on_send
         self.magic = magic
         self._positions: list[PositionView] = []
@@ -53,6 +54,7 @@ class FakeBroker:
         self._login_ok = True
         self.server_offset_s = 10800   # +3h, like FTMO summer
         self.rates: list = []          # list[RateBar], set by tests
+        self.rest_pendings = False     # opt-in: route 'pending' to resting orders (OCO tests)
 
     # connection
     def initialize(self, path): self.events.append(("initialize", path)); return self._init_ok
@@ -75,12 +77,19 @@ class FakeBroker:
 
     def order_send(self, order: BrokerOrder) -> OrderSendResult:
         self.events.append(("order_send", order.action, order.comment))
+        self.sent_orders.append(order)
         retcode = self.retcode_sequence.pop(0) if self.retcode_sequence else TRADE_RETCODE_DONE
         if retcode != TRADE_RETCODE_DONE:
             return OrderSendResult(retcode=retcode, comment=f"reject {retcode}")
         self._ticket += 1
         price = order.price or (self.symbol.ask if "buy" in order.order_type else self.symbol.bid)
-        if order.action in ("deal", "pending"):
+        if order.action == "pending" and self.rest_pendings:
+            ptype = 0 if order.order_type.startswith("buy") else 1
+            self._pendings.append(PendingView(
+                ticket=self._ticket, symbol=order.symbol, magic=order.magic, type=ptype,
+                volume_current=order.volume, price_open=price, sl=order.sl, tp=order.tp,
+                comment=order.comment))
+        elif order.action in ("deal", "pending"):
             ptype = 0 if order.order_type.startswith("buy") else 1
             self._positions.append(PositionView(
                 ticket=self._ticket, symbol=order.symbol, magic=order.magic, type=ptype,
@@ -92,6 +101,8 @@ class FakeBroker:
                 commission=-3.5, time_epoch=1_900_000_000, comment=order.comment, entry=0))
         elif order.action == "close":
             self._positions = [p for p in self._positions if p.ticket != order.position]
+        elif order.action == "remove":
+            self._pendings = [o for o in self._pendings if o.ticket != order.order_ticket]
         return OrderSendResult(retcode=retcode, order=self._ticket, deal=self._ticket,
                                price=price, volume=order.volume, comment="done")
 
@@ -108,3 +119,15 @@ class FakeBroker:
             ticket=ticket or self._ticket, symbol=symbol, magic=magic or self.magic, type=0,
             volume=0.1, price_open=1.16, sl=1.158, tp=1.165, comment=comment))
         return self._positions[-1]
+
+    def fill_pending(self, ticket=None):
+        """Simulate an intrabar touch: convert a resting pending into an open position."""
+        o = next((o for o in self._pendings if ticket is None or o.ticket == ticket), None)
+        if o is None:
+            return None
+        self._pendings = [x for x in self._pendings if x.ticket != o.ticket]
+        pos = PositionView(ticket=o.ticket, symbol=o.symbol, magic=o.magic, type=o.type,
+                           volume=o.volume_current, price_open=o.price_open, sl=o.sl,
+                           tp=o.tp, comment=o.comment)
+        self._positions.append(pos)
+        return pos

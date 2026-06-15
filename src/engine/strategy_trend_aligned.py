@@ -70,7 +70,9 @@ from src.risk.types import ContextBias  # noqa: F401  (kept for signature parity
 
 from .indicators import ema_slope_sign
 from .strategy import SessionBreakoutER
-from .types import Direction, NoSignal, Signal
+from dataclasses import replace
+
+from .types import ArmSignal, Direction, NoSignal, Signal
 
 
 class TrendAlignedORB(SessionBreakoutER):
@@ -96,6 +98,17 @@ class TrendAlignedORB(SessionBreakoutER):
 
     def evaluate(self, bars, now_utc, context_bias, calendar=None):
         sig = super().evaluate(bars, now_utc, context_bias, calendar)
+        if isinstance(sig, ArmSignal):
+            # Resting-stop incumbent: keep only the leg aligned with the trend (drop the
+            # other). Still strictly subtractive — it can only remove a leg, never add one.
+            trend = self._trend_sign(bars)
+            if trend == 0:
+                return NoSignal(ensure_utc(now_utc), "trend_unconfirmed")
+            long_leg = sig.long if trend > 0 else None
+            short_leg = sig.short if trend < 0 else None
+            if long_leg is None and short_leg is None:
+                return NoSignal(ensure_utc(now_utc), "trend_misaligned")
+            return replace(sig, long=long_leg, short=short_leg)
         if not isinstance(sig, Signal):
             return sig  # pass through every incumbent NoSignal unchanged
         trend = self._trend_sign(bars)

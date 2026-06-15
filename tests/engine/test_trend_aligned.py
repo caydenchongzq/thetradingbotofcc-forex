@@ -19,7 +19,8 @@ from src.engine.indicators import ema_slope_sign
 from src.engine.registry import build_strategy
 from src.engine.strategy import SessionBreakoutER
 from src.engine.strategy_trend_aligned import TrendAlignedORB
-from src.engine.types import Bar, Direction, NoSignal, Signal
+from datetime import timedelta as _td  # noqa
+from src.engine.types import ArmSignal, Bar, Direction, NoSignal, Signal
 from src.risk.types import ContextBias
 
 PIP = 0.0001
@@ -105,48 +106,35 @@ def _make(warmup_dir: int, break_dir: int, n_warmup: int = 16, step: float = 0.0
 
 
 def test_aligned_long_passes_through_identical_to_incumbent():
-    """Up-trend warmup + long break: filter is aligned -> the incumbent signal, byte-for-byte."""
-    bars, now, lvl = _make(warmup_dir=+1, break_dir=+1)
+    bars, now, _ = _make(warmup_dir=+1, break_dir=+1)
     base = SessionBreakoutER(CFG).evaluate(bars, now, ContextBias.NORMAL, None)
     cand = TrendAlignedORB(CFG).evaluate(bars, now, ContextBias.NORMAL, None)
-    assert isinstance(base, Signal) and base.direction is Direction.LONG   # fixture sanity
-    assert isinstance(cand, Signal)
-    assert cand.direction is base.direction
-    assert cand.entry_price == base.entry_price == lvl
-    assert cand.exit_plan.initial_sl_price == base.exit_plan.initial_sl_price
-    assert cand.exit_plan.initial_sl_pips == base.exit_plan.initial_sl_pips
-    assert cand.exit_plan.targets == base.exit_plan.targets
+    assert isinstance(base, Signal) and base.direction is Direction.LONG
+    assert isinstance(cand, Signal) and cand == base          # aligned -> byte-for-byte
 
 
 def test_aligned_short_passes_through_identical_to_incumbent():
-    """Down-trend warmup + short break: aligned -> identical incumbent short signal."""
-    bars, now, lvl = _make(warmup_dir=-1, break_dir=-1)
+    bars, now, _ = _make(warmup_dir=-1, break_dir=-1)
     base = SessionBreakoutER(CFG).evaluate(bars, now, ContextBias.NORMAL, None)
     cand = TrendAlignedORB(CFG).evaluate(bars, now, ContextBias.NORMAL, None)
-    assert isinstance(base, Signal) and base.direction is Direction.SHORT  # fixture sanity
-    assert isinstance(cand, Signal)
-    assert cand.direction is base.direction
-    assert cand.entry_price == base.entry_price == lvl
+    assert isinstance(base, Signal) and base.direction is Direction.SHORT
+    assert isinstance(cand, Signal) and cand == base
 
 
 def test_misaligned_long_break_in_downtrend_is_vetoed():
-    """Down-trend warmup but a LONG break: incumbent fires, the filter vetoes it."""
     bars, now, _ = _make(warmup_dir=-1, break_dir=+1)
     base = SessionBreakoutER(CFG).evaluate(bars, now, ContextBias.NORMAL, None)
     cand = TrendAlignedORB(CFG).evaluate(bars, now, ContextBias.NORMAL, None)
-    assert isinstance(base, Signal) and base.direction is Direction.LONG   # incumbent WOULD fire
-    assert isinstance(cand, NoSignal)
-    assert cand.reason == "trend_misaligned"
+    assert isinstance(base, Signal) and base.direction is Direction.LONG
+    assert isinstance(cand, NoSignal) and cand.reason == "trend_misaligned"
 
 
 def test_misaligned_short_break_in_uptrend_is_vetoed():
-    """Up-trend warmup but a SHORT break: incumbent fires, the filter vetoes it."""
     bars, now, _ = _make(warmup_dir=+1, break_dir=-1)
     base = SessionBreakoutER(CFG).evaluate(bars, now, ContextBias.NORMAL, None)
     cand = TrendAlignedORB(CFG).evaluate(bars, now, ContextBias.NORMAL, None)
     assert isinstance(base, Signal) and base.direction is Direction.SHORT
-    assert isinstance(cand, NoSignal)
-    assert cand.reason == "trend_misaligned"
+    assert isinstance(cand, NoSignal) and cand.reason == "trend_misaligned"
 
 
 def test_subset_invariant_never_adds_a_trade():

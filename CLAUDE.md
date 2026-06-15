@@ -23,6 +23,14 @@ ever proposes config changes that the backtester and a human must approve.
    If you change entry/exit/management semantics you MUST mirror them in BOTH the engine and
    the live path before promoting. All MT5 calls are isolated in `RealMT5Broker`; logic is
    tested via `FakeBroker`.
+   **Entry-fill realism (the seam that bites):** the backtest fill must be one the LIVE path
+   can actually place. A stop filled *at the level* is only valid if live rests it *before*
+   the trigger; a stop placed *after* a bar closes beyond the level is not live-placeable
+   (MT5 `retcode 10015`). The incumbent's promoted +0.391R was a backtest artifact of exactly
+   this unfillable fill — both live-faithful fills (resting-touch −0.267R, market-at-close
+   −0.024R) lose the edge. Default new entries to **market**; resting-stop OCO is available
+   (emit `ArmSignal`, modelled as an intrabar touch). See `docs/RESTING_STOP_FIX.md` (cautionary,
+   like `docs/EXIT_MODEL.md`).
 4. **Fail safe.** Any ambiguous/degraded state ⇒ no new trade (`NoSignal`). The Risk
    Governor can only ever reduce risk relative to the strategy's request, never increase it.
 5. **AI is never inline on a live trade.** Improvement is offline: propose ⇒ backtest ⇒
@@ -74,12 +82,16 @@ ONLY by promoting a config whose `name` is it.
 ## Playbook — add a new indicator / concept / strategy
 1. **Indicator** → `src/engine/indicators.py`, pure + unit-tested.
 2. **Strategy** → implement the `Strategy` protocol in `src/engine` (`strategy.py`, or a new
-   module): `evaluate()` returns `Signal | NoSignal`, `manage()` returns `ManageDecision`.
-   Keep it pure; every degraded path ⇒ `NoSignal`. Give it a `name` and add one
-   `register("Name", Class)` line in `src/engine/registry.py`.
+   module): `evaluate()` returns `Signal | NoSignal` (or `ArmSignal` for a resting-stop OCO),
+   `manage()` returns `ManageDecision`. Keep it pure; every degraded path ⇒ `NoSignal`. Give it
+   a `name` and add one `register("Name", Class)` line in `src/engine/registry.py`.
    Choose **exit geometry from the strategy's own mechanism** — stop ~1.0–2.0×ATR, target
    R:R ≥ 1:1 (1:2–1:3 where a sub-50% win rate is expected). NEVER default to the incumbent's
    `1.2×ATR / 1R`; justify it or say why 1R fits (spec 08 §5.8).
+   Choose a **live-fillable entry** (invariant #3): `entry_type="market"` (fill at the signal
+   price ± spread), or a resting-stop OCO (`ArmSignal`, filled on an intrabar touch). A stop at
+   a level you only confirm at the close is NOT live-placeable — never model a fill the live
+   path can't achieve.
 3. Wire nothing live yet. Add unit tests under `tests/engine` and `tests/backtest`.
 4. **Validate on real data (dev, store untouched):**
    `py scripts/run_backtest.py --strategy Name --walkforward` + an A/B vs the current HEAD

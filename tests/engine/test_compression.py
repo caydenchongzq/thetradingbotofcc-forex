@@ -7,6 +7,8 @@ degraded path (insufficient pre-session history) blocks — fail safe.
 
 from __future__ import annotations
 
+import pytest
+
 from datetime import datetime, timedelta, timezone
 
 from src.engine.indicators import compression_pct
@@ -30,6 +32,8 @@ CFG = {
               "partial_fractions": [1.0], "move_be_after_r": None},
     "compression": {"recent_bars": 20, "baseline_bars": 60, "max_pct": 0.50},
 }
+
+
 
 
 def _bar(ts, o, h, l, c):

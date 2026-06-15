@@ -12,13 +12,25 @@ scheduled. Remaining work is validation-process and strategy R&D, not core build
 
 | Spec | Component | State |
 |---|---|---|
-| 01 | Strategy engine (SessionBreakoutER) | ✅ live (v1 exit model: single 1R TP) |
+| 01 | Strategy engine (SessionBreakoutER) | ⚠️ entry-fill artifact — no live edge (see below); code now market entry, not promotable |
 | 02 | Risk Governor | ✅ |
 | 03 | Execution / MT5 adapter | ✅ (A2 live place→close verified) |
 | 04 | Journal & State | ✅ |
 | 05 | Backtest harness + walk-forward + lockbox | ✅ (vectorbt/MC/PBO deferred) |
 | 06 | Improvement loop (param tuning) | ✅ governance + 3 scheduled agents |
 | 07 | Ops / deployment | ✅ VPS + WinSW + R2 sync + alerts + file-sink |
+
+## ⚠️ 2026-06-15 — SessionBreakoutER has NO live-realizable edge (entry-fill artifact)
+The retcode-10015 live rejections exposed a live ≠ backtest break at the **entry seam**: the
+backtest filled a breakout stop *at the level*, a fill the live path cannot place after the bar
+closes beyond it. A/B on the real Parquet (same 224 trades, only the fill differs): stop-at-level
+**+0.391R** (not live-placeable) vs the two live-faithful fills — resting-stop touch **−0.267R**
+and market-at-close **−0.024R**; a tight-overshoot filter tops out +0.008R/99 trades. The edge was
+the unfillable level fill. **Incumbent code switched to market entry (live-safe, NOT profitable →
+do not deploy expecting v4 numbers); needs a strategy rethink, not an entry patch.** Resting-stop
+machinery kept as generic capability + dev strategy `SessionBreakoutERResting` + `entry.mode` lever.
+Full write-up: `docs/RESTING_STOP_FIX.md` §4–5; library entry `2026-06-15-resting-stop-and-market-entry`;
+generalizable rule added to CLAUDE.md invariant #3 + spec 08 validate step.
 
 ## Validation in progress
 - **A5 forward test** on the FTMO account — running; watching live fills vs backtest.

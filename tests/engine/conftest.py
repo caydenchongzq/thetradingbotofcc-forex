@@ -59,3 +59,20 @@ DEFAULT_CFG = {
     "exits": {"atr_mult_sl": 1.2, "target_r_multiples": [1.0, 2.0],
               "partial_fractions": [0.5, 0.5], "move_be_after_r": 1.0},
 }
+
+
+# --- resting-stop (arming) fixtures (RESTING_STOP_FIX) -----------------------
+# Regime must pass AT OR-end now (a bar earlier than the old breakout bar); the synthetic
+# trend series saturates the ATR percentile there, so relax the high-vol ceiling for arm
+# fixtures. This only affects the vol-band classification, not the arming/fill mechanics.
+ARM_CFG = {**DEFAULT_CFG, "regime": {**DEFAULT_CFG["regime"], "atr_high_pct": 1.0}}
+
+
+def make_arm_series(base_date, kind="trend_up"):
+    """(arm_bars, now, breakout_bar). ``arm_bars`` ends on the FINAL opening-range bar so
+    ``evaluate`` arms; ``now`` is just after it; ``breakout_bar`` is the first post-OR bar
+    whose intrabar range touches a level (append it to drive a touch-fill)."""
+    bars, _ = make_series(base_date, kind)
+    arm_bars = bars[:-1]                       # drop the breakout bar -> last == final OR bar
+    now = arm_bars[-1].ts_open_utc + timedelta(minutes=5)
+    return arm_bars, now, bars[-1]

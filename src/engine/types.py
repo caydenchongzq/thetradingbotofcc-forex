@@ -92,6 +92,28 @@ class Signal:
 
 
 @dataclass(frozen=True)
+class ArmSignal:
+    """A two-sided *resting* breakout arm (resting-stop model, RESTING_STOP_FIX §3).
+
+    Emitted ONCE per session at opening-range end (regime + news gate read AT OR-end).
+    It carries a fully-formed per-side stop ``Signal`` for each side that can legally rest
+    a pending stop (``long`` rests above the range, ``short`` below). A side is ``None``
+    when price has already traded through that level at OR-end (a stop cannot rest on the
+    wrong side of the market). Whichever side's level is touched intrabar fills; the sibling
+    is cancelled (OCO). ``expire_utc`` is the session window-end in UTC — the resting orders
+    are cancelled then. This restores live == backtest at the entry seam: live actually rests
+    the stop in advance, exactly as the backtester models the intrabar touch.
+    """
+    instrument: str
+    ts_decision_utc: datetime
+    long: Optional[Signal]    # LONG stop Signal at long_level (entry_price == level), or None
+    short: Optional[Signal]   # SHORT stop Signal at short_level, or None
+    expire_utc: datetime
+    regime: RegimeState
+    config_version: int
+
+
+@dataclass(frozen=True)
 class NoSignal:
     ts_decision_utc: datetime
     reason: str  # "outside_session" | "regime_gate_failed" | "no_range_break" | ...

@@ -54,12 +54,14 @@ from .strategy_asian_sweep import AsianSweepFade  # noqa: E402
 from .strategy_asian_sweep_rr import AsianSweepFadeRR  # noqa: E402
 from .strategy_breakout_retest import BreakoutRetestER  # noqa: E402
 from .strategy_compression import SessionBreakoutERCompression  # noqa: E402
+from .strategy_resting import SessionBreakoutERResting  # noqa: E402
 from .strategy_late_drift import LateSessionDrift  # noqa: E402
 from .strategy_second_entry import SecondEntryORB  # noqa: E402
 from .strategy_trend_aligned import TrendAlignedORB  # noqa: E402
 from .strategy_trend_pullback import TrendPullbackEMA  # noqa: E402
 
 register("SessionBreakoutERCompression", SessionBreakoutERCompression)
+register("SessionBreakoutERResting", SessionBreakoutERResting)
 register("AsianSweepFade", AsianSweepFade)
 register("AsianSweepFadeRR", AsianSweepFadeRR)
 register("BreakoutRetestER", BreakoutRetestER)

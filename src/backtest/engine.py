@@ -20,6 +20,15 @@ A management action on bar N only affects bars N+1.. (it cannot change an intrab
 already happened during bar N). Legs are aggregated into ONE ``SimTrade`` per entry, so the
 metrics/gates treat a scaled-out position as a single trade with its blended R-multiple.
 
+ENTRY model. Two shapes, both live-faithful:
+  * Market/single-stop strategies emit a directional ``Signal`` -> entered immediately at
+    the signal bar (market fill ± spread/slip, or stop fill at level + slip).
+  * Resting-stop strategies (SessionBreakoutER, RESTING_STOP_FIX §3) emit an ``ArmSignal``
+    at OR-end. We size BOTH legs then (lots fixed at arm) and hold them as a virtual OCO
+    pair; whichever level is TOUCHED intrabar fills (false breakouts that close back inside
+    now trade too — the realistic cost the old close-confirm model hid). open_risk accrues
+    on the FILL, never at arm; a pending that never fills adds zero risk.
+
 PARITY NOTE: the live path does not yet implement intermediate partials (it exits 100% at
 the broker TP). Mirroring this model into ``strategy.manage`` + the execution adapter is a
 required follow-up (Phase 2) before any config relying on these exits is promoted/deployed.
@@ -29,11 +38,12 @@ configuration; the multi-target exits below are backtest-only R&D.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 
 from src.common.timeutil import ensure_utc, ftmo_day_start, is_new_ftmo_day
 from src.engine.strategy import to_risk_signal
+from src.engine.types import ArmSignal
 from src.engine.types import Bar as EngineBar
 from src.engine.types import Signal as EngineSignal
 from src.risk.governor import RiskGovernor, apply_daily_reset
@@ -63,6 +73,23 @@ class _Target:
     price: float
     fraction: float
     filled: bool = False
+
+
+@dataclass
+class _ArmedSide:
+    """One sized, resting leg of an OCO arm. ``lots`` are fixed at arm/OR-end; the leg
+    fills later on an intrabar touch of ``sig.entry_price`` (the level)."""
+    sig: EngineSignal
+    lots: float
+
+
+@dataclass
+class _Armed:
+    """The two-sided resting-stop state held by the backtester between OR-end and a
+    fill / window-expiry (the simulated OCO pair)."""
+    long: _ArmedSide | None
+    short: _ArmedSide | None
+    expire_utc: datetime
 
 
 @dataclass
@@ -153,6 +180,7 @@ class EventDrivenBacktester:
         balance = self.initial
         pos = None
         pos_opened_idx = 0
+        armed: _Armed | None = None      # resting OCO state (resting-stop model)
         trades: list = []
 
         for i, bar in enumerate(bars):
@@ -162,6 +190,7 @@ class EventDrivenBacktester:
             if is_new_ftmo_day(day.reset_ts_utc, now):
                 day = apply_daily_reset(day, balance, now)
                 ftmo.reset_day(balance)
+                armed = None              # never carry a resting arm across the daily reset
 
             if i < warmup:
                 ftmo.update(balance)
@@ -189,10 +218,24 @@ class EventDrivenBacktester:
                         day = _dec_open_risk(day, pos.risk_usd)
                         pos = None
 
-            elif day.killswitch.value not in ("halted", "flatten"):
-                pos, day, balance = self._maybe_enter(bar, history, now, day, balance, i)
-                if pos is not None:
-                    pos_opened_idx = i
+            else:
+                # Flat. Drop a resting arm that has expired (window-end) or that the kill-
+                # switch has invalidated; otherwise try to fill it intrabar, else arm fresh.
+                if armed is not None and (now >= armed.expire_utc
+                                          or day.killswitch.value in ("halted", "flatten")):
+                    armed = None
+                if armed is not None:
+                    pos, day = self._try_fill_armed(armed, bar, now, day, i)
+                    if pos is not None:
+                        pos_opened_idx = i
+                        armed = None
+                if pos is None and armed is None \
+                        and day.killswitch.value not in ("halted", "flatten"):
+                    pos, armed, day = self._evaluate_flat(bar, history, now, day, balance, i)
+                    if pos is not None:
+                        pos_opened_idx = i
+                    # If we just armed (on the final OR bar), the resting stops become fillable
+                    # on the NEXT bar — they were not resting during this bar, so no fill here.
 
             equity = balance + (self._unrealized(pos, bar.close) if pos else 0.0)
             ftmo.observe_requests(day.requests_used_today)
@@ -219,28 +262,102 @@ class EventDrivenBacktester:
         )
 
     # ------------------------------------------------------------- internals
-    def _maybe_enter(self, bar, history, now, day, balance, i):
+    def _evaluate_flat(self, bar, history, now, day, balance, i):
+        """Flat-bar evaluation. ``ArmSignal`` (resting-stop strategies) -> arm an OCO pair
+        sized now; a plain ``Signal`` (market/stop strategies) -> enter immediately as before.
+        Returns ``(pos | None, armed | None, day)``."""
         sig = self.strategy.evaluate(history, now, ContextBias.NORMAL, self.calendar)
-        if not isinstance(sig, EngineSignal):
-            return None, day, balance
+        if isinstance(sig, ArmSignal):
+            armed, day = self._build_armed(sig, now, day, balance)
+            return None, armed, day
+        if isinstance(sig, EngineSignal):
+            pos, day = self._enter_from_signal(sig, bar, now, day, balance, i)
+            return pos, None, day
+        return None, None, day
+
+    def _enter_from_signal(self, sig, bar, now, day, balance, i):
+        """Single-signal market/stop entry path (non-arming strategies). Unchanged geometry:
+        a 'stop' fills at the level + slip, a 'market' fills at price ± spread/slip."""
         rsig = to_risk_signal(
             sig, reference_price=sig.entry_price, news_blackout_active=False,
             near_session_gap=False, opposing_position_open=False,
             adds_to_losing_same_dir=False, pending_orders_count=0,
         )
-        equity = balance
-        acct = AccountState(equity=equity, balance=balance, currency=self.currency,
+        acct = AccountState(equity=balance, balance=balance, currency=self.currency,
                             ts_utc=now, is_fresh=True)
         dec = self.governor.evaluate_entry(rsig, acct, day, now, self.sm)
         if not dec.approved or dec.lots <= 0:
-            return None, day, balance
+            return None, day
         side = sig.direction.value
         fill = self.cost.stop_entry_fill(side, sig.entry_price) if sig.entry_type == "stop" \
             else self.cost.entry_fill(side, sig.entry_price, bar.spread_pips)
+        pos, risk_usd = self._make_position(sig, fill, dec.lots, bar, now, i)
+        day = replace(day, requests_used_today=day.requests_used_today + 1,
+                      open_risk_usd=day.open_risk_usd + risk_usd,
+                      trades_opened_today=day.trades_opened_today + 1)
+        return pos, day
+
+    # ---- resting-stop (OCO) arm + intrabar touch-fill -------------------
+    def _build_armed(self, arm: ArmSignal, now, day, balance):
+        """Size each armable side through the Governor (lots fixed at OR-end) and consume a
+        broker request per resting leg. Risk does NOT accrue here — a pending that never
+        fills adds zero open risk; ``open_risk_usd`` accrues on the FILL (see _open_armed)."""
+        acct = AccountState(equity=balance, balance=balance, currency=self.currency,
+                            ts_utc=now, is_fresh=True)
+        placed = 0
+        sides: dict[str, _ArmedSide] = {}
+        for key, side_sig in (("long", arm.long), ("short", arm.short)):
+            if side_sig is None:
+                continue
+            rsig = to_risk_signal(
+                side_sig, reference_price=side_sig.entry_price, news_blackout_active=False,
+                near_session_gap=False, opposing_position_open=False,
+                adds_to_losing_same_dir=False, pending_orders_count=placed)
+            dec = self.governor.evaluate_entry(rsig, acct, day, now, self.sm)
+            if not dec.approved or dec.lots <= 0:
+                continue
+            sides[key] = _ArmedSide(sig=side_sig, lots=dec.lots)
+            placed += 1
+        if not sides:
+            return None, day
+        day = replace(day, requests_used_today=day.requests_used_today + placed)
+        return _Armed(long=sides.get("long"), short=sides.get("short"),
+                      expire_utc=ensure_utc(arm.expire_utc)), day
+
+    def _try_fill_armed(self, armed: _Armed, bar, now, day, i):
+        """Fill a resting leg on an intrabar touch of its level. A bar that spans BOTH levels
+        (rare) resolves by which level sits nearer the bar OPEN — price reaches the nearer
+        level first (documented pessimistic-by-nearest). Returns ``(pos | None, day)``."""
+        long_hit = armed.long is not None and bar.high >= armed.long.sig.entry_price
+        short_hit = armed.short is not None and bar.low <= armed.short.sig.entry_price
+        if not long_hit and not short_hit:
+            return None, day
+        if long_hit and short_hit:
+            d_long = abs(armed.long.sig.entry_price - bar.open)
+            d_short = abs(armed.short.sig.entry_price - bar.open)
+            chosen = armed.long if d_long <= d_short else armed.short
+        else:
+            chosen = armed.long if long_hit else armed.short
+        return self._open_armed(chosen, bar, now, day, i)
+
+    def _open_armed(self, side: _ArmedSide, bar, now, day, i):
+        """Convert a touched resting leg into an open position. Fill geometry is identical to
+        the validated stop-entry model (level + adverse slip); risk accrues HERE (on fill)."""
+        sig = side.sig
+        fill = self.cost.stop_entry_fill(sig.direction.value, sig.entry_price)
+        pos, risk_usd = self._make_position(sig, fill, side.lots, bar, now, i)
+        day = replace(day, open_risk_usd=day.open_risk_usd + risk_usd,
+                      trades_opened_today=day.trades_opened_today + 1)
+        return pos, day
+
+    def _make_position(self, sig, fill, lots, bar, now, i) -> tuple:
+        """Build an ``_OpenPosition`` (+ its risk_usd) from a signal, a fill price and lots.
+        Shared by the market path and the resting-stop path so both model exits identically."""
         slip = abs(fill - sig.entry_price) / self.sm.pip_size
         plan = sig.exit_plan
+        side = sig.direction.value
         risk_price = abs(fill - plan.initial_sl_price)
-        risk_usd = risk_price / self.sm.pip_size * self.sm.pip_value_per_lot_usd * dec.lots
+        risk_usd = risk_price / self.sm.pip_size * self.sm.pip_value_per_lot_usd * lots
 
         targets = list(plan.targets) if plan.targets else []
         fractions = list(plan.partial_fractions) if plan.partial_fractions else []
@@ -259,7 +376,7 @@ class EventDrivenBacktester:
             partial_targets = []
 
         pos = _OpenPosition(
-            side=side, entry_price=fill, initial_lots=dec.lots, lots=dec.lots,
+            side=side, entry_price=fill, initial_lots=lots, lots=lots,
             sl_price=plan.initial_sl_price, risk_price=risk_price, final_tp=final_tp,
             entry_ts=now, risk_usd=risk_usd, spread_at_entry=bar.spread_pips,
             entry_slippage=slip, partial_targets=partial_targets,
@@ -268,14 +385,7 @@ class EventDrivenBacktester:
             vol_state=getattr(sig.regime, "vol_state", "normal").value
             if hasattr(getattr(sig.regime, "vol_state", None), "value") else "normal",
         )
-        day = DayState(
-            balance_0000=day.balance_0000, initial=day.initial,
-            requests_used_today=day.requests_used_today + 1, killswitch=day.killswitch,
-            open_risk_usd=day.open_risk_usd + risk_usd,
-            trades_opened_today=day.trades_opened_today + 1,
-            reset_ts_utc=day.reset_ts_utc, recent_risk_usds=day.recent_risk_usds,
-        )
-        return pos, day, balance
+        return pos, risk_usd
 
     # ---- exit sequencing ------------------------------------------------
     def _intrabar(self, pos, bar, now):

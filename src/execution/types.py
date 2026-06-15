@@ -29,6 +29,7 @@ class OrderIntent:
     tp_prices: tuple[float, ...]
     expire_utc: datetime | None
     comment: str             # carries client_id for cross-identification in the terminal
+    oco_group: str | None = None  # shared id for an OCO pair (resting breakout); see decide.py
 
 
 @dataclass(frozen=True)

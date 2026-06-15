@@ -4,7 +4,17 @@ The live loop and the backtester (05) both call exactly ``evaluate`` and ``manag
 other surface. The engine is a PURE function of (bars, now, context_bias, calendar):
 identical inputs => identical Signal. No wall-clock reads (only the injected ``now``),
 no network, no hidden state. Every ambiguous/degraded state resolves to "no new trade"
-(fail safe, README §2)."""
+(fail safe, README §2).
+
+ENTRY (RESTING_STOP_FIX option 2): the breakout fires on CLOSE-confirmation — a bar must
+*close* beyond the opening-range edge (the selectivity that IS the edge: it screens out the
+intrabar pokes that snap back inside). It is then entered at MARKET (≈ that confirmed close),
+so there is no resting stop sitting on the wrong side of the market for MT5 to reject (the
+retcode-10015 fix) and live == backtest at the entry seam. Exits are anchored to the fill so
+1R == sl_pips is preserved. A strategy that genuinely wants touch-fill (resting-stop) entries
+uses ``SessionBreakoutERResting`` (strategy_resting.py) instead — that path emits an
+``ArmSignal`` and rests an OCO pair; it is a DEV strategy, never the promoted incumbent,
+because touch-fill admits the false breakouts that erase this strategy's edge."""
 
 from __future__ import annotations
 
@@ -71,7 +81,8 @@ def _t(hhmm: str) -> time:
 
 
 class SessionBreakoutER:
-    """R1's pick: London/NY-overlap opening-range breakout on 15m EURUSD, ER/ATR-gated."""
+    """R1's pick: London/NY-overlap opening-range breakout on 15m EURUSD, ER/ATR-gated.
+    Close-confirmation trigger, MARKET entry (RESTING_STOP_FIX option 2)."""
 
     name = "SessionBreakoutER"
 
@@ -105,6 +116,13 @@ class SessionBreakoutER:
         self.blk_after = int(bl.get("after_min", 15))
         self.pip = float(self.config.get("pip_size", 0.0001))
         self.tf_min = int(self.config.get("timeframe_minutes", 15))
+        # Entry mechanism (RESTING_STOP_FIX): "market" (default, live-faithful — fill at the
+        # confirmed close) or "stop" (the pre-fix model that filled at the level; kept as an
+        # A/B baseline only — it is NOT live-placeable after a close beyond the level, retcode
+        # 10015). The promoted incumbent must be "market".
+        self.entry_mode = str(self.config.get("entry", {}).get("mode", "market"))
+        _mo = self.config.get("entry", {}).get("max_overshoot_pips", None)
+        self.max_overshoot_pips = float(_mo) if _mo is not None else None
 
     # ----------------------------------------------------------------------
     def warmup_bars(self) -> int:
@@ -120,6 +138,8 @@ class SessionBreakoutER:
 
     # ----------------------------------------------------------------------
     def evaluate(self, bars, now_utc, context_bias, calendar=None):
+        """Close-confirmation breakout, MARKET entry. Fires when ``last`` CLOSES beyond a
+        range edge; filled at market (≈ that close). Returns Signal | NoSignal."""
         now = ensure_utc(now_utc)
         if len(bars) < self.warmup_bars():
             return NoSignal(now, "insufficient_history")
@@ -171,10 +191,22 @@ class SessionBreakoutER:
         long_fired = self.one_shot and any(b.close > long_level for b in post)
         short_fired = self.one_shot and any(b.close < short_level for b in post)
 
+        # Close-confirmation: the bar must CLOSE beyond the edge. Entered at MARKET == the
+        # confirmed close (entry_price = last.close), so there is no wrong-side resting stop.
+        etype = "stop" if self.entry_mode == "stop" else "market"
+        mo = self.max_overshoot_pips
         if last.close > long_level and not long_fired:
-            return self._signal(Direction.LONG, long_level, range_low, regime, now, context_bias)
+            if mo is not None and (last.close - long_level) / self.pip > mo:
+                return NoSignal(now, "overshoot_too_large")
+            eref = long_level if etype == "stop" else last.close
+            return self._signal(Direction.LONG, long_level, range_low, regime, now,
+                                context_bias, eref, etype)
         if last.close < short_level and not short_fired:
-            return self._signal(Direction.SHORT, short_level, range_high, regime, now, context_bias)
+            if mo is not None and (short_level - last.close) / self.pip > mo:
+                return NoSignal(now, "overshoot_too_large")
+            eref = short_level if etype == "stop" else last.close
+            return self._signal(Direction.SHORT, short_level, range_high, regime, now,
+                                context_bias, eref, etype)
         return NoSignal(now, "no_range_break")
 
     # ----------------------------------------------------------------------
@@ -212,10 +244,20 @@ class SessionBreakoutER:
         except Exception:
             return True   # fail closed: never trade blind into possible news (spec 01 §5)
 
-    def _signal(self, direction, level, structure_stop, regime, now, bias) -> Signal:
+    def _signal(self, direction, level, structure_stop, regime, now, bias,
+                entry_price=None, entry_type="market") -> Signal:
+        """Build a Signal. Exits anchor to ``entry_price`` so 1R == sl_pips regardless of where
+        the fill lands. The incumbent passes the confirmed close as a MARKET entry; the
+        resting-stop dev variant passes the level as a STOP entry (level-anchored exits)."""
+        entry = level if entry_price is None else entry_price
         struct_sl_pips = abs(level - structure_stop) / self.pip
         atr_sl_pips = self.atr_mult_sl * regime.atr_pips
         sl_pips = max(struct_sl_pips, atr_sl_pips)
+        # Exits anchor to the LEVEL (the incumbent's validated geometry). Entering at the
+        # post-close market price (above the long level / below the short level) therefore
+        # gives the favourable skew that IS the edge — a CLOSER target and a FARTHER stop, i.e.
+        # a high win rate at sub-1R. Anchoring exits to the fill instead would symmetrise R:R
+        # and erase that skew. The risk denominator (|fill - SL|) is measured from the fill.
         if direction is Direction.LONG:
             sl_price = level - sl_pips * self.pip
             targets = tuple(level + r * sl_pips * self.pip for r in self.target_r)
@@ -225,12 +267,14 @@ class SessionBreakoutER:
         plan = ExitPlan(initial_sl_price=sl_price, initial_sl_pips=sl_pips, targets=targets,
                         target_r_multiples=self.target_r, partial_fractions=self.partials,
                         move_be_after_r=self.move_be_after_r, trail=None)
+        reason = ("range_close_break + ER>=thr + ATR_normal"
+                  + (" (market entry)" if entry_type == "market" else " (resting stop)"))
         return Signal(instrument=self.config.get("instrument", "EURUSD"),
-                      ts_decision_utc=now, direction=direction, entry_type="stop",
-                      entry_price=level, exit_plan=plan, regime=regime,
+                      ts_decision_utc=now, direction=direction, entry_type=entry_type,
+                      entry_price=entry, exit_plan=plan, regime=regime,
                       session="london_ny_overlap", breakout_level=level,
-                      entry_reason="range_break + ER>=thr + ATR_normal",
-                      context_bias=bias, config_version=self.config_version)
+                      entry_reason=reason, context_bias=bias,
+                      config_version=self.config_version)
 
     # ----------------------------------------------------------------------
     def manage(self, open_trade, bars, now_utc) -> ManageDecision:

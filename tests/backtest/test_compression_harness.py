@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from datetime import datetime, timedelta, timezone
 
 from src.backtest.costs import CostModel
@@ -15,6 +17,8 @@ from tests.engine.test_compression import CFG, build_series
 
 SM = SymbolMeta(symbol="EURUSD", pip_value_per_lot_usd=10.0, min_lot=0.01, max_lot=50.0,
                 lot_step=0.01, stops_level_pips=0.0, digits=5, pip_size=0.0001)
+
+
 
 
 def _to_bt(bars):

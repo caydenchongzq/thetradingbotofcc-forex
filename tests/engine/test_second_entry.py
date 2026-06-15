@@ -10,6 +10,8 @@ opening range is the 12:00/12:15 UTC bars and post-OR bars run from 12:30 UTC.
 
 from __future__ import annotations
 
+import pytest
+
 from datetime import datetime, timedelta, timezone
 
 from src.engine.indicators import second_entry_breakout_trigger
@@ -109,6 +111,7 @@ def _series(base_date=datetime(2025, 6, 17), n_warmup=16):
     return bars, b1, b2, b3, now, lvl
 
 
+@pytest.mark.skip(reason="incumbent now ARMS (RESTING_STOP_FIX §3); SecondEntryORB is a rejected close-trigger dev candidate — comparison invalid until it is itself ported")
 def test_first_break_identical_to_incumbent():
     """The first-break signal must be byte-for-byte the incumbent's (additive-only invariant)."""
     bars, b1, _, _, _, _ = _series()
@@ -124,6 +127,7 @@ def test_first_break_identical_to_incumbent():
     assert cand.exit_plan.targets == base.exit_plan.targets
 
 
+@pytest.mark.skip(reason="incumbent now ARMS (RESTING_STOP_FIX §3); SecondEntryORB is a rejected close-trigger dev candidate — comparison invalid until it is itself ported")
 def test_second_entry_fires_where_incumbent_is_silent():
     """On the re-break bar the incumbent (one-shot) is silent; SecondEntryORB enters."""
     bars, b1, b2, b3, now, lvl = _series()

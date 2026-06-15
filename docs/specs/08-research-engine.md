@@ -72,7 +72,12 @@ CLAUDE.md + this spec. Stages:
            Strategy module → register() → unit tests → pytest green
 5 validate py scripts/run_backtest.py --strategy <Name> --walkforward --trials <cumulative>
            + A/B vs current HEAD (compare_exits.py pattern). Judge on gates + lockbox,
-           never raw expectancy (docs/EXIT_MODEL.md precedent).
+           never raw expectancy (docs/EXIT_MODEL.md precedent). ALSO verify the entry is
+           LIVE-FILLABLE — the backtest fill must be one the live path can place (market, or
+           a resting-stop OCO filled on an intrabar touch); a stop confirmed at the close but
+           filled at the level is NOT live-placeable (retcode 10015). docs/RESTING_STOP_FIX.md
+           precedent: that unfillable fill made the incumbent look +0.391R when both live fills
+           lose. An entry whose edge needs a better fill than a live order gets = REJECT.
 6 report   write library report (template §3), update INDEX.md, append trial ledger
            entry; if ALL gates pass → write proposal JSON to config/proposals/
 7 handoff  git commit (code + tests + docs), summary message to Cayden;

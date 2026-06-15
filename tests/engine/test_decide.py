@@ -1,9 +1,9 @@
-"""Per-bar live decision chain (live == backtest). spec 01+02 wiring."""
+"""Per-bar live decision chain (live == backtest). spec 01+02 wiring (market entry)."""
 
 from datetime import date, datetime, timezone
 
 from src.common.config import RiskConfig
-from src.engine.decide import build_entry_intent, decide_entry, decide_manage
+from src.engine.decide import decide_entry, decide_manage
 from src.engine.strategy import ManageDecision
 from src.risk.governor import RiskGovernor
 from src.risk.types import AccountState, ContextBias, DayState, KillSwitchState, SymbolMeta
@@ -24,44 +24,36 @@ def _day(**over):
     return DayState(balance_0000=100_000.0, initial=100_000.0, **over)
 
 
-def test_entry_chain_produces_order_intent():
-    bars, now = make_series(date(2026, 6, 2), "trend_up")
-    gov = RiskGovernor(RiskConfig())
-    d = decide_entry(SessionBreakoutER(DEFAULT_CFG), gov, bars, _acct(), _day(), SM, now,
-                     ContextBias.NORMAL, None, client_id="EURUSD-T1", magic=MAGIC)
+def _decide(kind, acct=None, day=None, client_id="EURUSD-T1"):
+    bars, now = make_series(date(2026, 6, 2), kind)
+    return decide_entry(SessionBreakoutER(DEFAULT_CFG), RiskGovernor(RiskConfig()), bars,
+                        acct or _acct(), day or _day(), SM, now, ContextBias.NORMAL, None,
+                        client_id=client_id, magic=MAGIC)
+
+
+def test_entry_chain_produces_market_order_intent():
+    d = _decide("trend_up")
     assert d.action == "enter"
     assert d.intent is not None
-    assert d.intent.side == "buy"            # long breakout -> buy
-    assert d.intent.order_kind == "stop"     # breakout stop entry
+    assert d.intent.side == "buy"
+    assert d.intent.order_kind == "market"
     assert d.intent.volume_lots > 0
     assert d.intent.sl_price < d.intent.price
     assert d.intent.client_id == "EURUSD-T1" and d.intent.magic == MAGIC
 
 
 def test_entry_vetoed_when_killswitch_halted():
-    bars, now = make_series(date(2026, 6, 2), "trend_up")
-    gov = RiskGovernor(RiskConfig())
-    d = decide_entry(SessionBreakoutER(DEFAULT_CFG), gov, bars, _acct(),
-                     _day(killswitch=KillSwitchState.HALTED), SM, now,
-                     ContextBias.NORMAL, None, client_id="x", magic=MAGIC)
-    assert d.action == "vetoed"
-    assert d.intent is None
+    d = _decide("trend_up", day=_day(killswitch=KillSwitchState.HALTED))
+    assert d.action == "vetoed" and d.intent is None
 
 
 def test_no_signal_when_engine_declines():
-    bars, now = make_series(date(2026, 6, 2), "chop")   # ER too low -> regime gate fails
-    gov = RiskGovernor(RiskConfig())
-    d = decide_entry(SessionBreakoutER(DEFAULT_CFG), gov, bars, _acct(), _day(), SM, now,
-                     ContextBias.NORMAL, None, client_id="x", magic=MAGIC)
-    assert d.action == "no_signal"
-    assert d.reason == "regime_gate_failed"
+    d = _decide("chop")
+    assert d.action == "no_signal" and d.reason == "regime_gate_failed"
 
 
 def test_stale_account_vetoes_entry():
-    bars, now = make_series(date(2026, 6, 2), "trend_up")
-    gov = RiskGovernor(RiskConfig())
-    d = decide_entry(SessionBreakoutER(DEFAULT_CFG), gov, bars, _acct(fresh=False), _day(),
-                     SM, now, ContextBias.NORMAL, None, client_id="x", magic=MAGIC)
+    d = _decide("trend_up", acct=_acct(fresh=False))
     assert d.action == "vetoed" and d.reason == "stale_account"
 
 
@@ -77,10 +69,10 @@ class _MoveSLStrategy:
 
 def test_manage_close_allowed_even_when_halted():
     gov = RiskGovernor(RiskConfig())
-    d = decide_manage(_CloseStrategy(), gov, object(), [], 
+    d = decide_manage(_CloseStrategy(), gov, object(), [],
                       datetime(2026, 6, 2, tzinfo=timezone.utc),
                       _acct(), _day(killswitch=KillSwitchState.FLATTEN))
-    assert d.action == "close"   # risk-reducing -> always allowed
+    assert d.action == "close"
 
 
 def test_manage_move_sl_returns_new_sl():

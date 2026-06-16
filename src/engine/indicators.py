@@ -209,3 +209,34 @@ def ema_slope_sign(values: Sequence[float], window: int, lookback: int) -> int:
     if slope < 0:
         return -1
     return 0
+
+
+def session_vwap(highs: Sequence[float], lows: Sequence[float], closes: Sequence[float],
+                 volumes: Sequence[float]) -> float:
+    """Volume-weighted average price of the supplied (intraday session) bars.
+
+    VWAP = sum(typical_price_i * volume_i) / sum(volume_i), with the typical price taken as
+    (high + low + close) / 3. The caller passes ONLY the bars that belong to the current
+    session window (anchored at the session open), so this is a cumulative *session* VWAP —
+    the institutional intraday "fair value" reference that benchmarked execution flow leans
+    against. Used by VWAPStretchReversion as the mean a stretched price is faded back toward.
+
+    Pure function: no state, no clock, no I/O. FAIL-SAFE: empty input, length mismatch, or a
+    non-positive total volume (e.g. a tick-volume gap) -> ``nan`` (callers treat a non-finite
+    VWAP as "no usable anchor" -> NoSignal). Falling back to an unweighted mean would silently
+    change the anchor's meaning, so we surface the degeneracy instead.
+    """
+    n = len(closes)
+    if n == 0 or len(highs) != n or len(lows) != n or len(volumes) != n:
+        return float("nan")
+    num = 0.0
+    den = 0.0
+    for h, l, c, v in zip(highs, lows, closes, volumes):
+        vol = v if (v is not None and math.isfinite(v) and v > 0) else 0.0
+        typical = (h + l + c) / 3.0
+        num += typical * vol
+        den += vol
+    if den <= 0:
+        return float("nan")
+    vwap = num / den
+    return vwap if math.isfinite(vwap) else float("nan")

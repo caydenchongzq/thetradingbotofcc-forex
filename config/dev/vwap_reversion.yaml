@@ -1,0 +1,35 @@
+# DEV config — VWAPStretchReversion (research-engine candidate 2026-06-16, spec 08).
+# Fade a statistical over-extension from the volume-weighted SESSION mean back toward it, in a
+# RANGING (low-ER) regime. MARKET entry at the confirmed close (live-fillable). Single
+# pre-registered configuration; deliberately NOT swept. Run with:
+#   py scripts/run_backtest.py --config-file config/dev/vwap_reversion.yaml --walkforward --trials <cumulative>
+# Bypasses the ConfigStore HEAD; writes nothing to state/.
+strategy:
+  name: VWAPStretchReversion
+  instrument: EURUSD
+  timeframe: M15
+  pip_size: 0.0001
+  timeframe_minutes: 15
+  vwap:
+    anchor: "08:00"           # London time; session-VWAP accumulation start (London open)
+    window_start: "08:00"     # trade window — liquid London + overlap hours only
+    window_end: "16:00"
+    min_session_bars: 8       # >= 2h of M15 bars since the anchor or VWAP is not meaningful
+    stretch_atr_mult: 1.5     # fade when |close - vwap| >= 1.5 x ATR
+  regime:                     # measured identically to the incumbent; ER gate INVERTED (chop)
+    er_window: 14
+    er_threshold: 0.30        # reversion requires ER < threshold (ranging) — a-priori complement
+    atr_window: 14
+    atr_floor_pips: 4.0
+    atr_ceiling_pips: 22.0
+    atr_low_pct: 0.20
+    atr_high_pct: 0.90
+  exits:                      # pre-registered per spec 08 §5.8 (NOT the incumbent's 1.2/1R)
+    atr_mult_sl: 1.0          # stop = max(dist-to-extreme, 1.0 x ATR): room past the excursion
+    target_r_multiples: [1.5] # target ~ revert to the mean (~1.5 x ATR ~= 1.5R); R:R 1.5:1
+    partial_fractions: [1.0]
+    move_be_after_r: null
+  blackout:
+    high_impact_currencies: [EUR, USD]
+    before_min: 15
+    after_min: 15

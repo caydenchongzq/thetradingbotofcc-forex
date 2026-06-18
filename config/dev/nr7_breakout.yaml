@@ -1,0 +1,40 @@
+# DEV config — NR7VolatilityBreakout (research-engine candidate 2026-06-18, spec 08).
+# Crabel narrow-range (NR7) volatility contraction->expansion breakout, STANDALONE family.
+# Resting-stop OCO armed at the NR7 bar's close (levels known in advance => live-placeable,
+# no retcode 10015); whichever extreme is touched intrabar fills, the sibling cancels.
+# Single pre-registered configuration; deliberately NOT swept. Run with:
+#   py scripts/run_backtest.py --config-file config/dev/nr7_breakout.yaml --walkforward --trials <cumulative>
+# Bypasses the ConfigStore HEAD; writes nothing to state/.
+strategy:
+  name: NR7VolatilityBreakout
+  instrument: EURUSD
+  timeframe: M15
+  pip_size: 0.0001
+  timeframe_minutes: 15
+  session:                    # liquid London + NY block only (thin-hour spread is the killer)
+    tz: Europe/London
+    window_start: "08:00"
+    window_end: "18:00"
+  breakout:
+    buffer_pips: 1.5          # break trigger sits this far beyond the NR7 bar's extreme
+  nr7:
+    lookback: 7               # NR7: strict narrowest range of the last 7 M15 bars
+    entry_valid_bars: 4       # resting OCO lives ~1h (4 x M15) then cancels if untouched
+    require_trend: false      # the contraction IS the setup; no incumbent ER>=thr pre-condition
+  regime:                     # measured identically to the incumbent; only the NORMAL vol band gates
+    er_window: 14
+    er_threshold: 0.30
+    atr_window: 14
+    atr_floor_pips: 4.0
+    atr_ceiling_pips: 22.0
+    atr_low_pct: 0.20
+    atr_high_pct: 0.90
+  exits:                      # pre-registered per spec 08 §5.8 (NOT the incumbent's 1.2/1R)
+    atr_mult_sl: 1.0          # stop = max(NR7 opposite-extreme dist, 1.0 x ATR): ATR floor dominates
+    target_r_multiples: [2.0] # R:R 1:2 — a volatility breakout expects a sub-50% win rate
+    partial_fractions: [1.0]  # single full exit; no scaling, no break-even -> validated seam
+    move_be_after_r: null
+  blackout:
+    high_impact_currencies: [EUR, USD]
+    before_min: 15
+    after_min: 15

@@ -84,6 +84,32 @@ def compression_pct(highs: Sequence[float], lows: Sequence[float],
     return percentile_rank(mean_recent, baseline)
 
 
+def is_narrow_range(highs: Sequence[float], lows: Sequence[float], lookback: int) -> bool:
+    """Crabel NR-k narrow-range flag: True iff the LAST bar's high-low range is *strictly*
+    the narrowest of the last ``lookback`` bars (``lookback=7`` => the classic NR7).
+
+    The economic premise (Toby Crabel, *Day Trading with Short Term Price Patterns & Opening
+    Range Breakout*, 1990): an extreme single-bar volatility *contraction* tends to precede a
+    volatility *expansion* (the Bollinger-squeeze intuition). The narrowest range in k bars is a
+    coiled spring; the subsequent break of that bar's extreme has follow-through. We require the
+    *strict* minimum (ties excluded) so the flag marks a genuine contraction, not a plateau.
+
+    Pure function: no state, no clock, no I/O. FAIL-SAFE: a lookback < 2, length mismatch,
+    insufficient history, or any non-finite/negative range -> ``False`` (callers treat False as
+    "no setup" -> no trade)."""
+    n = len(highs)
+    if lookback < 2 or n < lookback or len(lows) != n:
+        return False
+    ranges = [highs[i] - lows[i] for i in range(n - lookback, n)]
+    last = ranges[-1]
+    if not math.isfinite(last) or last < 0:
+        return False
+    for r in ranges[:-1]:
+        if not math.isfinite(r) or last >= r:
+            return False
+    return True
+
+
 def ema_series(values: Sequence[float], window: int) -> list[float]:
     """Exponential moving average series (Wilder-independent, alpha = 2/(window+1)).
 

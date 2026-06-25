@@ -63,6 +63,7 @@ from .strategy_nr7_breakout import NR7VolatilityBreakout  # noqa: E402
 from .strategy_second_entry import SecondEntryORB  # noqa: E402
 from .strategy_trend_aligned import TrendAlignedORB  # noqa: E402
 from .strategy_trend_pullback import TrendPullbackEMA  # noqa: E402
+from .strategy_structural_exit import SessionBreakoutERStructuralExit  # noqa: E402
 from .strategy_vwap_reversion import VWAPStretchReversion  # noqa: E402
 
 register("SessionBreakoutERCompression", SessionBreakoutERCompression)
@@ -78,4 +79,5 @@ register("NR7VolatilityBreakout", NR7VolatilityBreakout)
 register("SecondEntryORB", SecondEntryORB)
 register("TrendAlignedORB", TrendAlignedORB)
 register("TrendPullbackEMA", TrendPullbackEMA)
+register("SessionBreakoutERStructuralExit", SessionBreakoutERStructuralExit)
 register("VWAPStretchReversion", VWAPStretchReversion)

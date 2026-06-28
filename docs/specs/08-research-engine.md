@@ -231,3 +231,45 @@ report in its triage (cites it in "Relation to prior work").
   `ftmo-research-engine-m5-review` (2026-06-21). First scheduled run 2026-06-08 — treat
   it as the supervised M4 dry run. Note: Mondays overlap the `weekly-strategy-optimizer`
   task (08:00); both draw from the same trial budget.
+- 2026-06-21 — **M5 review complete** (this scheduled, unsupervised run; Cayden not present —
+  recommendations below await his explicit confirmation, nothing enacted).
+  - **Acceptance criteria met.** Consecutive unsupervised runs each produced complete, cited
+    reports with gate-table verdicts; zero writes to `state/` (verified: no `state/` commits
+    since 2026-06-08); no live-path edits; **full pytest green (393 passed, 2 skipped)**; later
+    runs demonstrably recall prior reports (every report carries a `related:[...]` chain and an
+    explicit "Relation to prior work" — e.g. 06-20 follow-through cites the 06-15 market-fill
+    finding and the 0/2 prior exit-models).
+  - **Trial burn vs cap & DSR.** Burn is **well under the 10/week cap**: W24 ≈ 7 research
+    trials, W25 = 5 (06-15/16/18/20/21), with ≥2 ideas/week killed at triage for **zero** trial
+    cost (06-17 seasonality, 06-19 false-break-fade — probe-rejected, no ledger entry). The cap
+    is **not the binding constraint**; triage quality is. Cumulative trials ≈ **170**, so the
+    DSR bar on the single EURUSD-M15 dataset is now high and rising — every further trial on the
+    same data tightens it (spec §8 risk, materializing as designed).
+  - **Report quality: high.** Machine-readable frontmatter, 5 cited sources each, full required
+    sections (Hypothesis/Sources/Relation/Spec/Results-vs-gates/A-B/Verdict/**Lessons**/Next),
+    and strong cross-recall. The rejection-memory rule (§4.3) is being honoured (families marked
+    closed; variants must state differentiation).
+  - **Yield.** Of ~13 candidates since 06-08, **zero promotable**: 1 passed-but-dominated
+    (SecondEntryORB), 1 dominates-HEAD-on-quality-but-fails-the-200-trade-floor (TrendAlignedORB,
+    the **strongest re-test-on-longer-data candidate**), rest rejected. Families now broadly
+    closed under live-faithful fills: directional breakout, mean-reversion (0/4), trend (0/3),
+    exit-model (0/4, fill-anchored 06-21 added), fixed-time seasonality. Remaining open space = incumbent-FILTER candidates
+    (all 200-trade-floor-bound on current history) and the real lever, a **longer data export /
+    second instrument** (§8 backlog #4).
+  - **Repo-hygiene flag (for Cayden, not auto-fixed).** Working tree is dirty in a way one-commit-
+    per-run should prevent: the 06-18/06-19 reports, `strategy_nr7_breakout.py`, its test, and
+    `config/dev/nr7_breakout.yaml` appear as **both staged deletions and untracked files**, with
+    `indicators.py` modified-in-index-and-tree and four untracked `PROMOTION_BRIEF_*` files — an
+    interrupted/aborted commit. pytest is green and no `state/`/live-path writes occurred, so no
+    invariant is breached, but the index should be cleaned up manually.
+  - **Recommendation (awaiting Cayden's OK — NOT applied):**
+    (1) **Reduce cadence daily → 3×/week** (e.g. Mon/Wed/Fri) by editing only the
+    `ftmo-research-engine` cron (`30 8 * * *` → `30 8 * * 1,3,5`). Rationale: the idea space is
+    largely exhausted on current data, most runs now yield probe-rejections or floor-blocked
+    filters, and slowing trial accrual protects the rising DSR bar for higher-conviction
+    candidates. (2) **Keep the weekly cap at 10** — unchanged. It is already non-binding (burn
+    4–7) and becomes doubly so at 3×/week; the limiter is triage, not the cap. (3) **Unblocking
+    action for Cayden:** prioritise a longer-history and/or second-instrument export (§8 #4) —
+    it would revive TrendAlignedORB and the incumbent-filter queue (which must be re-based on the
+    **market-fill** incumbent, base −0.024R, not the level-fill artifact). No config/schedule
+    changed in this session per the M5 task's standing constraint.

@@ -25,6 +25,9 @@ state/
 .env.*
 !.env.example
 
+# Local git worktrees
+.worktrees/
+
 # OS
 .DS_Store
 Thumbs.db

@@ -1,0 +1,29 @@
+{
+  "origin": {
+    "version": 1,
+    "sessionId": "local-21e2a407-4b9f-4d3b-a0e0-21a2603bf259",
+    "model": "grok-4.7-high",
+    "agent": "cursor",
+    "promptCount": 1,
+    "promptSummary": "this is trading bot that was built under claude code, review and plan the conversion to Cursor version. I have new strategy want to practice, but require to make sure the project is updated usable by ...",
+    "fullPrompt": "this is trading bot that was built under claude code, review and plan the conversion to Cursor version. I have new strategy want to practice, but require to make sure the project is updated usable by Cursor before we do anything.",
+    "prompts": [
+      {
+        "index": 0,
+        "text": "this is trading bot that was built under claude code, review and plan the conversion to Cursor version. I have new strategy want to practice, but require to make sure the project is updated usable by Cursor before we do anything.",
+        "agent": "cursor",
+        "model": "grok-4.7-high",
+        "files": [
+          ".gitignore",
+          "docs/superpowers/plans/2026-09-23-cursor-conversion.md",
+          "docs/superpowers/specs/2026-09-23-cursor-conversion-design.md"
+        ]
+      }
+    ],
+    "durationMs": 2683854,
+    "linesAdded": 134,
+    "linesRemoved": 0,
+    "originUrl": "https://getorigin.io/sessions/local-21e2a407-4b9f-4d3b-a0e0-21a2603bf259",
+    "timestamp": "2026-09-23T13:36:23.145Z"
+  }
+}

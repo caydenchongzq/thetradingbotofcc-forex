@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "sessionId": "local-21e2a407-4b9f-4d3b-a0e0-21a2603bf259",
+  "model": "grok-4.7-high",
+  "startedAt": "2026-09-23T12:51:39.290Z",
+  "endedAt": "2026-09-23T13:36:53.569Z",
+  "durationMs": 2714245,
+  "status": "running",
+  "tokens": {
+    "total": 0,
+    "input": 0,
+    "output": 0
+  },
+  "cost": {
+    "usd": 0
+  },
+  "toolCalls": 0,
+  "lines": {
+    "added": 134,
+    "removed": 0
+  },
+  "filesChanged": [
+    ".gitignore",
+    "docs/research/strategies/2026-07-08-microstructural-trend-demise-corroboration-triage.md"
+  ],
+  "git": {
+    "branch": "main",
+    "headBefore": "c446c98bbd6fba27b67cc7683c9b79d683f5c84c",
+    "headAfter": "8726fe86105da3fbb5b1a0eec56e2d9dbfb749f7",
+    "commitShas": [
+      "8726fe86105da3fbb5b1a0eec56e2d9dbfb749f7"
+    ]
+  },
+  "summary": "",
+  "originUrl": "https://getorigin.io/sessions/local-21e2a407-4b9f-4d3b-a0e0-21a2603bf259"
+}
